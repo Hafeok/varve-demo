@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Imported after every project body, so it sees the project's own settings.
+
+    ADR 0003: everything that ships is AOT-compatible. Every project that is
+    not a test project is held to the trim, AOT and single-file analyzers. The
+    IL-prefixed diagnostics they raise are errors in .editorconfig and never
+    enter NoWarn.
+  -->
+  <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+  </PropertyGroup>
+
+</Project>

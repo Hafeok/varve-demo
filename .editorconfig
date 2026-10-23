@@ -1,0 +1,135 @@
+# varve-demo code style, adapted from Varve's (ADR 0003). EnforceCodeStyleInBuild
+# is on and warnings are errors, so everything set to warning here fails the
+# build.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.{csproj,props,targets,slnx,config,xml}]
+indent_size = 2
+
+[*.cs]
+# --- licence header ---------------------------------------------------------
+# MPL-2.0 is file-level copyleft: a file is Covered Software because it carries
+# the Exhibit A notice (ADR 0003). This template makes an IDE insert it into a
+# new file. It is a convenience; the binding check is the spec test
+# LicenceGates.Every_cs_file_starts_with_the_exhibit_a_notice.
+file_header_template = This Source Code Form is subject to the terms of the Mozilla Public\nLicense, v. 2.0. If a copy of the MPL was not distributed with this\nfile, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# --- usings -----------------------------------------------------------------
+# ImplicitUsings is disabled repo-wide; usings are explicit and sorted, and an
+# unnecessary one is a defect (IDE0005 needs GenerateDocumentationFile, which
+# Directory.Build.props sets).
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_diagnostic.IDE0005.severity = warning
+
+# --- language ---------------------------------------------------------------
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:warning
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_var_elsewhere = false:silent
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_prefer_range_operator = true:suggestion
+csharp_style_prefer_index_operator = true:suggestion
+csharp_prefer_static_local_function = true:warning
+csharp_style_prefer_readonly_struct = true:warning
+csharp_style_prefer_readonly_struct_member = true:warning
+
+dotnet_style_readonly_field = true:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_property = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_event = false:silent
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_auto_properties = true:warning
+
+# --- naming -----------------------------------------------------------------
+dotnet_naming_rule.types_are_pascal_case.symbols = type_symbols
+dotnet_naming_rule.types_are_pascal_case.style = pascal_case
+dotnet_naming_rule.types_are_pascal_case.severity = warning
+dotnet_naming_symbols.type_symbols.applicable_kinds = class, struct, interface, enum, delegate
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = i_prefixed
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_style.i_prefixed.capitalization = pascal_case
+dotnet_naming_style.i_prefixed.required_prefix = I
+
+dotnet_naming_rule.private_fields_are_underscore_camel.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_are_underscore_camel.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel.severity = warning
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+# --- constraint 2: nothing that breaks AOT or trimming may be warning-only ---
+# The IL-prefixed trim/AOT/single-file analyzers are errors. They are never
+# relaxed here and never enter NoWarn. See docs/adr/0004-enforcement-by-analyzers.md.
+dotnet_diagnostic.IL2026.severity = error
+dotnet_diagnostic.IL2046.severity = error
+dotnet_diagnostic.IL2050.severity = error
+dotnet_diagnostic.IL2055.severity = error
+dotnet_diagnostic.IL2057.severity = error
+dotnet_diagnostic.IL2058.severity = error
+dotnet_diagnostic.IL2059.severity = error
+dotnet_diagnostic.IL2060.severity = error
+dotnet_diagnostic.IL2062.severity = error
+dotnet_diagnostic.IL2067.severity = error
+dotnet_diagnostic.IL2070.severity = error
+dotnet_diagnostic.IL2072.severity = error
+dotnet_diagnostic.IL2075.severity = error
+dotnet_diagnostic.IL2087.severity = error
+dotnet_diagnostic.IL2091.severity = error
+dotnet_diagnostic.IL3000.severity = error
+dotnet_diagnostic.IL3001.severity = error
+dotnet_diagnostic.IL3002.severity = error
+dotnet_diagnostic.IL3050.severity = error
+dotnet_diagnostic.IL3051.severity = error
+dotnet_diagnostic.IL3053.severity = error
+
+# --- the DD rules -----------------------------------------------------------
+# DecisionDriven.Analyzers' rules ship at their tier's severity, and nothing
+# here lowers one. The only exception path is [DesignDecision] on the symbol,
+# citing a filed decision (AGENTS.md).
+
+# --- the RDF vocabulary -----------------------------------------------------
+# A triple is a subject, a predicate and an object. CA1720 objects to the
+# identifier "object" because it is a type name, and CA1716 objects to it on an
+# interface member because it is a C# keyword. Both are right in general and
+# wrong here: these names come from RDF 1.1 Concepts, they are what every
+# specification, every other implementation and every user of RDF
+# calls the three positions, and renaming them would make the code harder to
+# read in exchange for nothing. Quieted for the whole repository rather than
+# suppressed at each site, because the vocabulary is repository-wide.
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1720.severity = none
+
+[tests/**/*.cs]
+# Test assemblies document themselves through their test names rather than
+# XML comments.
+dotnet_diagnostic.CS1591.severity = none
+
+# Snake_case test names. A test name is a sentence read in a failure report,
+# not an identifier anyone calls, and CA1707 is written for the latter.
+dotnet_diagnostic.CA1707.severity = none
