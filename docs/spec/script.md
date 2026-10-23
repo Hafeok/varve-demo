@@ -95,8 +95,12 @@ re-checks them.
   `SparqlHttpClient.FollowAsync` has the same at-least-once, resumable
   contract, but its only filter is a graph.
 - **F6.** A store refuses to open a log whose hash chain does not verify
-  (Varve ADR 0014). No public command, API or route verifies the chain on
-  demand: verification happens as a side effect of opening.
+  (Varve ADR 0014). Opening checks every segment, record and commit header
+  against the chain, but checks record bodies against their hashes only above
+  what `derived/` claims to hold (the newest checkpoint or persisted
+  projection); a body below it is checked only when a later read needs it
+  (Varve's `Log.cs`; citations in the traceability record of #1). No public
+  command, API or route verifies the whole chain on demand.
 - **F7.** Bulk load is one logical commit, embedded only (`varve load` over a
   directory, Varve ADR 0105), and records no agent; the server has no
   bulk-load endpoint. The demo does not use it: S1 is a full replay over HTTP
@@ -297,11 +301,13 @@ counter shows how many cycles have run. It repeats on demand.
    in doubt.
 2. At a random moment the server's process is killed with `SIGKILL`, not
    stopped, and its container restarted on the same volume.
-3. After the restart the server opens the dataset; a store that does not verify
-   its chain refuses to open (F6), so an open is the verification the viewer
-   can see today. **Chain verification on demand** is a gap (F6): S6 shows it
-   with its Varve issue linked. *Varve issue to file: "verify a dataset's hash
-   chain on demand".*
+3. After the restart the server opens the dataset; a store whose chain does
+   not verify refuses to open (F6), so an open is the verification the viewer
+   can see today. The screen says exactly what that open checked: every
+   header, and bodies only above the newest checkpoint. **Verifying the whole
+   chain, bodies included, on demand** is a gap (F6): S6 shows it with its
+   Varve issue linked. *Varve issue to file: "verify a dataset's hash chain on
+   demand".*
 4. Every acknowledged commit is present: the head is at or above the highest
    acknowledged position, and an as-of read at each acknowledged position finds
    that commit's quads. An in-doubt commit is reported as present or absent,
