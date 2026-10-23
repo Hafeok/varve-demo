@@ -25,11 +25,6 @@ a dataset directory, holds the sequencer, and commits with no agent or cause
 (`src/Varve.Server/Commands/Load.cs:27, 64`); the server has no bulk-load
 endpoint (Varve ADR 0105).
 
-The brief's step 1 says "bulk load with the load rate shown". This ADR reads
-that as *the whole snapshot is loaded, and the rate is shown*, not as Varve's
-`BeginBulkLoadAsync`: the review decided S1 is a full replay over HTTP (point
-5), for the reasons under Alternatives.
-
 ## Decision
 
 1. **The subset**: the top N package ids by total downloads at a pinned date,
