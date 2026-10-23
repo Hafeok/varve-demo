@@ -15,3 +15,4 @@ specification these decisions serve.
 | [0003](0003-conventions-taken-from-varve.md) | Conventions taken from Varve | Proposed |
 | [0004](0004-the-time-travel-clock.md) | The time-travel clock | Proposed |
 | [0005](0005-the-browser-step-is-gated-by-a-measurement.md) | The browser step is gated by a measurement | Proposed |
+| [0006](0006-json-ld-ingestion-through-varve-jsonld.md) | JSON-LD ingestion through `Varve.JsonLd` | Proposed |
