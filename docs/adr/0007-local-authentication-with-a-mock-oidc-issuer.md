@@ -51,7 +51,27 @@ What Varve has, read at `v0.1.0-preview.11`:
    The grants that give each role its permission are declarations applied with
    `varve apply` by the operator, as Varve documents; they are committed beside
    the issuer's configuration.
-4. **The README says plainly that the issuer is a mock**, that its tokens prove
+4. **The operator client is a bootstrap operator**
+   (`Varve:Manage:BootstrapOperators`, Varve's `src/Varve.Server/Settings.cs:225`).
+   Its tokens are for the management plane's audience (`Auth:Management:Audience`,
+   `api://varve-manage` by default; a token for both planes is refused by
+   both, `src/Varve.Server/ServerHost.cs:376-381, 459-470`). It needs two
+   permissions, checked against Varve's source:
+   - **`varve:server-admin`**, to create the dataset by applying its
+     declaration (`src/Varve.Protocol/Endpoints/ManagementEndpoints.cs:679-692`);
+     only an operator holds it (`src/Varve.Server/Permissions.cs:69`);
+   - **`varve:admin` on the dataset**, for the checkpoints the importer takes
+     through it (ADR 0004): `POST /manage/datasets/{name}/checkpoints` demands
+     `DatasetPermissions.Admin` (`src/Varve.Protocol/Endpoints/AdminEndpoints.cs:247`,
+     reached from `ManagementEndpoints.cs:389-398`), as does reading the
+     checkpoint list at `/manage/datasets/{name}/status`
+     (`src/Varve.Protocol/Endpoints/StatusEndpoint.cs:29`). An operator passes
+     that check on every dataset (`src/Varve.Management/GrantTable.cs:87-94`).
+
+   So the operator role covers both, and no extra grant is declared for it. An
+   `admin` grant on the one dataset would be enough for the checkpoints alone,
+   if the operator role is ever narrowed.
+5. **The README says plainly that the issuer is a mock**, that its tokens prove
    nothing about anyone, and shows how to point the demo at a real issuer: set
    the authority and audience, create the three clients there, apply the same
    grants.

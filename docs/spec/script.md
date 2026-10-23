@@ -81,8 +81,9 @@ re-checks them.
   position, 0 at or below the newest checkpoint. Beyond it is
   `422 as-of-distance-exceeded`, whose `actual` member is the distance (Varve
   ADR 0114). The server takes no checkpoints by policy; an operator takes them
-  on demand. A dataset's checkpoints are listed by `GET …/status`, which needs
-  `admin` (demo ADR 0004).
+  on demand with `POST /manage/datasets/{name}/checkpoints`. A dataset's
+  checkpoints are listed by `GET /manage/datasets/{name}/status`. Both need
+  `admin` on the dataset (demo ADRs 0004, 0007).
 - **F4.** The sequencer assigns commit timestamps as `max(clock, head's)`, and
   no request supplies one. Over HTTP the commit's cause is the server-minted
   request id, and no header sets it or any other commit metadata.
@@ -208,11 +209,13 @@ added and removed, grouped by package version.
    the demo computes for that position.
 6. `MaxAsOfDistance` is Varve's default; the dataset is checkpointed at least
    every `MaxAsOfDistance` commits during the import, so no position the
-   slider offers is refused. That needs a checkpoint policy on the server,
-   which Varve's server cannot be configured with (F3). Until it can, a
-   position beyond the bound is shown refused, with its Varve issue linked
-   (C6). *Varve issue to file: "a checkpoint policy configurable on the
-   server".*
+   slider offers is refused. Varve's server cannot be configured with a
+   checkpoint policy (F3), so the importer takes the checkpoints with
+   `POST /manage/datasets/{name}/checkpoints` through the operator client, as
+   Varve's operator guide documents (ADR 0004). The screen says the importer
+   takes them, as the operator, and why, with the Varve issue linked. When
+   Varve ships a server-side policy, the importer stops. *Varve issue to file:
+   "a checkpoint policy configurable on the server".*
 7. The diff between two positions comes from Varve's diff over the protocol and
    equals the set difference of two as-of reads of the same graphs.
 8. Because a details leaf replaces its version's graph (ADR 0008), a diff shows

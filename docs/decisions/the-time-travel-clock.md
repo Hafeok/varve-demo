@@ -14,9 +14,11 @@ decisions:
   - key: AsOfAnswerShowsItsCheckpoint
     statement: "Every as-of answer shows the checkpoint the read started from and how many commits Varve replayed after it, and CI holds that derivation to the actual distance in Varve's 422"
   - key: CheckpointAtLeastEveryMaxAsOfDistance
-    statement: "MaxAsOfDistance stays at Varve's default, and the dataset is checkpointed at least every MaxAsOfDistance commits during import by a server-side checkpoint policy"
+    statement: "MaxAsOfDistance stays at Varve's default, and the dataset is checkpointed at least every MaxAsOfDistance commits during import"
+  - key: ImporterTakesCheckpointsAsOperator
+    statement: "The importer takes the checkpoints with POST /manage/datasets/name/checkpoints through the operator client, Varve's documented operator procedure, and S3's screen says the importer takes them and why"
   - key: ServerCheckpointPolicyIsAVarveIssue
-    statement: "A checkpoint policy configurable on the server is filed as a Varve issue, and until it ships S3 shows the as-of-distance refusal it cannot avoid"
+    statement: "A checkpoint policy configurable on the server stays a Varve issue, and when Varve ships it the importer stops calling the checkpoint endpoint and the server is configured instead"
   - key: DomainClockIsAVarveIssue
     statement: "As-of by a declared domain clock is filed as a Varve issue, and the index goes if Varve ships it"
 ---
