@@ -11,6 +11,8 @@ decisions:
     statement: "deploy/mock-oauth2.json holds one client-credentials client per role: importer writes, viewer reads, operator applies declarations and grants"
   - key: OperatorClientIsABootstrapOperator
     statement: "The operator client is a bootstrap operator on the management audience, which gives it server-admin to create the dataset and admin on it for the checkpoints and status the importer reads"
+  - key: EveryWriteCarriesItsAgent
+    statement: "Every write in the log carries a real agent, the subject of the token that made it, and no write path that records no agent is used"
   - key: ReadmeSaysItIsAMock
     statement: "The README says the issuer is a mock and shows how to point the demo at a real issuer"
 ---

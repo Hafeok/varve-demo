@@ -136,8 +136,10 @@ with the time from the command to the answer.
 6. After the load, the importer's acknowledged commits number exactly the
    manifest's retained catalog commits, each acknowledged with its own
    `Varve-Position`, strictly increasing; every one carries the importer's
-   agent; and `<urn:varve-demo:catalog-log>` holds one assertion per retained
-   catalog commit.
+   agent, read from its feed record's `agent` line and equal to the importer
+   token's issuer and subject (ADR 0007, `EveryWriteCarriesItsAgent`); and
+   `<urn:varve-demo:catalog-log>` holds one assertion per retained catalog
+   commit.
 7. The manifest states N (3 000) and the catalog time window, and the screen
    shows both. The window's lower bound is the one ADR 0008 records from the
    catalog; its upper bound is the snapshot date.
@@ -328,7 +330,11 @@ counter shows how many cycles have run. It repeats on demand.
    acknowledged position, and an as-of read at each acknowledged position finds
    that commit's quads. An in-doubt commit is reported as present or absent,
    never counted as lost.
-5. CI runs at least 50 cycles per run, each within the target, and the counts
+5. Every commit present after the restart, acknowledged or in doubt, carries
+   the writer's agent on its feed record, the subject of the importer's token
+   (ADR 0007, `EveryWriteCarriesItsAgent`). A commit with no agent, or
+   another's, fails the run: a crash must not leave a write nobody made.
+6. CI runs at least 50 cycles per run, each within the target, and the counts
    (cycles, acknowledged commits, in-doubt, lost) go to the evidence page. Any
    lost acknowledged commit fails the run.
 

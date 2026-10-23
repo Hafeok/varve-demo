@@ -71,7 +71,22 @@ What Varve has, read at `v0.1.0-preview.11`:
    So the operator role covers both, and no extra grant is declared for it. An
    `admin` grant on the one dataset would be enough for the checkpoints alone,
    if the operator role is ever narrowed.
-5. **The README says plainly that the issuer is a mock**, that its tokens prove
+5. **Every write in the log carries a real agent: the subject of the token
+   that made it.** Over HTTP, Varve sets a commit's agent from the caller's
+   token (`src/Varve.Protocol/Endpoints/Writes.cs:274`): the issuer, `#`, and
+   the percent-encoded subject (`TokenIdentity.AgentOf`,
+   `src/Varve.Server/Identity.cs:26-40`; Varve's decision
+   `AgentIsIssuerAndSubjectIri`, its ADR 0094). In anonymous mode a commit has
+   none (`NoAgent`, `Identity.cs:65-69`). So never anonymous (point 1) is what
+   makes every commit name who made it, and this ruling says so on its own.
+   Even with OIDC on, `AgentOf` gives no agent when a token has no `iss` or no
+   subject claim, when the issuer contains `#`, or when the result is not a
+   valid IRI. So every client in `deploy/mock-oauth2.json` is given a `sub`,
+   and the issuer's URL has no fragment. No write path that records no agent is used:
+   Varve's embedded bulk load is one (ADR 0008). A client reads the agent on
+   the commit's feed record (`agent <term>`, Varve's `docs/spec/change-feed.md`
+   §2.1); S1 and S6 check it.
+6. **The README says plainly that the issuer is a mock**, that its tokens prove
    nothing about anyone, and shows how to point the demo at a real issuer: set
    the authority and audience, create the three clients there, apply the same
    grants.
