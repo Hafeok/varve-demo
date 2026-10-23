@@ -1,0 +1,52 @@
+# Restore, build in Release, run the gates with TRX output, upload the results.
+# Actions are pinned by full commit SHA, at the SHAs Varve's workflows pin
+# (ADR 0003).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and test
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore VarveDemo.slnx
+
+      - name: Build
+        run: dotnet build VarveDemo.slnx -c Release --no-restore
+
+      - name: Test
+        run: >-
+          dotnet test --solution VarveDemo.slnx -c Release --no-build
+          --report-trx --results-directory "${{ github.workspace }}/TestResults"
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: error
