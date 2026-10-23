@@ -97,16 +97,20 @@ re-checks them.
 - **F6.** A store refuses to open a log whose hash chain does not verify
   (Varve ADR 0014). No public command, API or route verifies the chain on
   demand: verification happens as a side effect of opening.
-- **F7.** Bulk load is one logical commit and is embedded only (`varve load`
-  over a directory, Varve ADR 0105); the server has no bulk-load endpoint.
+- **F7.** Bulk load is one logical commit, embedded only (`varve load` over a
+  directory, Varve ADR 0105), and records no agent; the server has no
+  bulk-load endpoint. The demo does not use it: S1 is a full replay over HTTP
+  (demo ADR 0008).
 
 ## S1 — Zero to query
 
 **The viewer sees** one command, `docker compose up`, on a machine with only
-Docker. The mock issuer starts, the Varve server starts, the importer
-authenticates and loads the snapshot, printing commits per second and quads
-per second as it goes, and the first answer to S2's question prints with the
-time from the command to the answer.
+Docker. The mock issuer starts, the Varve server starts, and the importer
+authenticates and replays the snapshot over HTTP, one Varve commit per catalog
+commit, printing commits per second and quads per second as it goes. It names
+the snapshot's two parameters, N and the catalog time window, so the viewer
+knows what history is loaded. The first answer to S2's question then prints,
+with the time from the command to the answer.
 
 **Acceptance criteria**
 
@@ -117,16 +121,26 @@ time from the command to the answer.
    attestation verifies (`gh attestation verify`) before the run.
 3. The server runs with OIDC authentication against the mock issuer; a request
    without a token is `401`.
-4. The load rate printed (commits/s and quads/s) is computed from the run's own
+4. The load is a **full replay** (ADR 0008): every catalog commit the
+   snapshot retains is sent as one SPARQL Update, authenticated as the
+   importer, in catalog order. There is no bulk load and no base.
+5. The load rate printed (commits/s and quads/s) is computed from the run's own
    wall clock and the counts the server acknowledged, and CI checks it equals
    the counts in the snapshot's manifest divided by the elapsed time printed,
    within rounding.
-5. After the load, the head position equals the number of catalog commits in
-   the snapshot (ADR 0008: one catalog commit, one Varve commit), or the
-   manifest's stated count under the base-and-replay mapping if ADR 0008's
-   open question resolves that way.
-6. The time from `docker compose up` to the first answer, excluding image
+6. After the load, the importer's acknowledged commits number exactly the
+   manifest's retained catalog commits, each acknowledged with its own
+   `Varve-Position`, strictly increasing; every one carries the importer's
+   agent; and `<urn:varve-demo:catalog-log>` holds one assertion per retained
+   catalog commit.
+7. The manifest states N (3 000) and the catalog time window, and the screen
+   shows both. The window's lower bound is the one ADR 0008 records from the
+   catalog; its upper bound is the snapshot date.
+8. The time from `docker compose up` to the first answer, excluding image
    pulls (measured from the first container's start), is within the target.
+   If it is not, the window is tuned, never N (ADR 0008); if no window that
+   still holds S2's and S3's story meets it, the target changes here and in the
+   README, with the measurement.
 
 **Target:** ≤ 3 min. **Check:** `S1_ZeroToQuery`.
 
