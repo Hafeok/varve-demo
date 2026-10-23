@@ -14,3 +14,4 @@ specification these decisions serve.
 | [0002](0002-consume-varve-only-as-released.md) | Consume Varve only as released | Proposed |
 | [0003](0003-conventions-taken-from-varve.md) | Conventions taken from Varve | Proposed |
 | [0004](0004-the-time-travel-clock.md) | The time-travel clock | Proposed |
+| [0005](0005-the-browser-step-is-gated-by-a-measurement.md) | The browser step is gated by a measurement | Proposed |
