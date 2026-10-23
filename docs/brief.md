@@ -23,7 +23,7 @@ Lead with evidence, not with how Varve was built. The AI-assisted development st
 
 Dataset: a subset of the NuGet catalog (the top few thousand packages), which is itself an append-only log of package publishes, edits and deletes. One catalog commit maps to one Varve commit.
 
-1. Zero to query: `docker compose up` or a `dotnet tool`; bulk load with the load rate shown.
+1. Zero to query: `docker compose up` or a `dotnet tool`; load the snapshot, with the load rate shown.
 2. A question developers care about, e.g. deprecated or vulnerable versions among my dependencies.
 3. Time travel: the same query as of an earlier point, plus a diff between two positions.
 4. Live change feed: a pattern subscription receiving new commits as they land.
