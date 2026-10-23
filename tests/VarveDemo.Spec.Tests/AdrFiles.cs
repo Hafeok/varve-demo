@@ -37,8 +37,11 @@ internal sealed record DecisionSet(string FileName, string? Set, string? Namespa
 
 internal static partial class AdrFiles
 {
-    public static IReadOnlyList<Adr> All() =>
-        [.. Directory.EnumerateFiles(RepositoryTree.PathOf("docs/adr"), "*.md")
+    public static IReadOnlyList<Adr> All() => All(RepositoryTree.PathOf("docs/adr"));
+
+    /// <summary>The ADRs in <paramref name="adrDirectory"/>, in number order.</summary>
+    public static IReadOnlyList<Adr> All(string adrDirectory) =>
+        [.. Directory.EnumerateFiles(adrDirectory, "*.md")
             .Select(static path => (Path: path, Match: AdrFileName().Match(Path.GetFileName(path))))
             .Where(static file => file.Match.Success)
             .Select(static file => new Adr(
@@ -49,10 +52,23 @@ internal static partial class AdrFiles
 
     public static IEnumerable<int> Numbers() => All().Select(static adr => adr.Number);
 
-    public static IReadOnlyList<DecisionSet> Sets() =>
-        [.. Directory.EnumerateFiles(RepositoryTree.PathOf("docs/decisions"), "*.md")
+    public static IReadOnlyList<DecisionSet> Sets() => Sets(RepositoryTree.PathOf("docs/decisions"));
+
+    /// <summary>The decision sets in <paramref name="decisionsDirectory"/>, its README excluded.</summary>
+    public static IReadOnlyList<DecisionSet> Sets(string decisionsDirectory) =>
+        [.. Directory.EnumerateFiles(decisionsDirectory, "*.md")
             .Where(static path => !string.Equals(Path.GetFileName(path), "README.md", StringComparison.Ordinal))
             .Select(static path => ReadSet(path))];
+
+    /// <summary>
+    /// The ADRs that need a decision set and have none: every ADR whose Status
+    /// does not name a superseding ADR, with no set whose <c>adr:</c> is its number.
+    /// </summary>
+    public static IReadOnlyList<string> WithoutASet(IReadOnlyList<Adr> adrs, IReadOnlyList<DecisionSet> sets)
+    {
+        HashSet<string> cited = [.. sets.Select(static set => set.Adr).OfType<string>()];
+        return [.. adrs.Where(adr => !adr.IsSuperseded && !cited.Contains(adr.FileName[..4])).Select(static adr => adr.FileName)];
+    }
 
     private static DecisionSet ReadSet(string path)
     {

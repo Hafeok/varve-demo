@@ -37,10 +37,9 @@ public sealed class AdrGates
     [Fact]
     public void Every_adr_not_superseded_has_a_decision_set_whose_adr_matches()
     {
-        HashSet<string> cited = [.. AdrFiles.Sets().Select(static set => set.Adr).OfType<string>()];
+        IReadOnlyList<string> missing = AdrFiles.WithoutASet(AdrFiles.All(), AdrFiles.Sets());
 
-        Assert.All(AdrFiles.All().Where(static adr => !adr.IsSuperseded), adr =>
-            Assert.True(cited.Contains(adr.FileName[..4]), adr.FileName + " has no set in docs/decisions/ with adr: " + adr.FileName[..4] + "."));
+        Assert.True(missing.Count == 0, "No set in docs/decisions/ whose adr: matches: " + string.Join(", ", missing));
     }
 
     [Fact]
