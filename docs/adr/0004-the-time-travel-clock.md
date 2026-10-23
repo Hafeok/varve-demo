@@ -79,17 +79,28 @@ not a clock: an unlisted version's is `1900-01-01T00:00:00Z`.
    three things: the catalog time asked for, the Varve position it resolved to,
    and that position's Varve timestamp. Both clocks are on screen; neither is
    passed off as the other.
-3. **Every as-of answer also shows where Varve started the read**: "served
-   from the extents up to checkpoint `c`, no log replayed" for a position at or
-   below the newest checkpoint, or "`n` commits replayed after checkpoint `c`"
-   above it (or after position 0 when there is none). The demo derives this
+3. **Every as-of answer also shows where Varve started the read.** The screen
+   states that an as-of read anywhere in history is served from checkpoints,
+   whose extents carry validity intervals (Varve ADR 0138), not by replaying
+   the log. Each answer then says "served from the extents up to checkpoint
+   `c`, no log replayed" for a position at or below the newest checkpoint, or
+   "`n` commits replayed after checkpoint `c`" above it. The demo derives this
    from the checkpoint list (`GET /manage/datasets/{name}/status`, by the
-   operator client) and
-   Varve's rule above. Because no Varve response names it, CI holds the
-   derivation to Varve: it requests a position deliberately beyond the bound
-   and checks that the `actual` member of Varve's `422` equals the distance
-   the demo computes. This is evidence about the storage engine, shown on
-   screen, not a footnote.
+   operator client) and Varve's rule above. No Varve response names it on
+   success, so CI holds the derivation to Varve with a CI-only server whose
+   `MaxAsOfDistance` is 0 (allowed: zero or more,
+   `src/Varve.Server/SettingsCheck.cs:268`). At that bound every as-of read
+   with a non-zero distance is refused with `422`, its `actual` member the
+   distance, and a read that succeeds has distance 0, by Varve's own check:
+   - **before the final checkpoint**, an as-of read at a position `p` is
+     refused with `actual` equal to `p`, the distance the demo computes;
+   - **after the final checkpoint**, an as-of read at an early position
+     succeeds: distance 0, so the reading of `DatasetExtents.cs` above is
+     tested, not cited. A read above the newest checkpoint is refused with
+     `actual` equal to its distance from it.
+
+   This is evidence about the storage engine, shown on screen, not a
+   footnote.
 4. **Resolution is a time index.** A disposable index of (catalog time,
    position) pairs, folded from the change feed through `FollowAsync`,
    reading each commit's `<urn:varve-demo:catalog-log>` assertion. Catalog time
@@ -102,15 +113,25 @@ not a clock: an unlisted version's is `1900-01-01T00:00:00Z`.
    find the greatest position whose newest catalog time is at or before `t`,
    and it must equal the index's answer (spec S3, criterion 3).
 6. **The default bound stays, and checkpoints keep every position in reach.**
-   `MaxAsOfDistance` is left at Varve's default. During the import the
-   dataset is checkpointed **at least every `MaxAsOfDistance` commits**, so
-   every position is either at or below the newest checkpoint (distance 0) or
-   within the bound above it.
+   `MaxAsOfDistance` is left at Varve's default. The rule:
+   - **one checkpoint at the end of the import**, which puts every imported
+     position at or below the newest extent set's end, distance 0;
+   - **then a checkpoint whenever more than K commits have landed since the
+     last one**, so a position above the newest checkpoint is at most K away
+     from it.
+
+   K is configuration, `VarveDemo:Checkpoints:EveryCommits`, proposed at 5 000.
+   It must be below `MaxAsOfDistance`, and the importer checks that at start
+   against the limit the server advertises in its service description
+   (`varve:maxAsOfDistance`, `src/Varve.Protocol/Endpoints/ServiceDescriptionEndpoint.cs:239`).
+   It refuses to run otherwise. There are **no checkpoints during the
+   import**: S3 reads nothing until the import has finished, and the final
+   checkpoint covers all of it.
 7. **The importer takes the checkpoints, as the operator.** Varve's server
    cannot be configured with a checkpoint policy (see Context), and its
    operator guide gives an on-demand checkpoint as the way to operate it
    without one. So the importer calls `POST /manage/datasets/{name}/checkpoints`
-   with the **operator client**, in the operator's role, on the schedule in
+   with the **operator client**, in the operator's role, by the rule in
    point 6. This is documented public API used as documented; it is not a
    workaround. S3's screen says so: "checkpoints are taken by the importer, as
    the operator, because Varve's server has no checkpoint policy yet", with
@@ -153,11 +174,16 @@ not a clock: an unlisted version's is `1900-01-01T00:00:00Z`.
 6. **Carry catalog time in commit metadata** (the brief's other option).
    Not available over HTTP (F4), and the embedded route is alternative 3.
 7. **Wait for a server-side checkpoint policy, and show the `422` until then**
-   (this ADR's second draft). Rejected in review: Varve documents an operator
+   (this ADR's second draft, before the review's ruling). Rejected in review: Varve documents an operator
    taking checkpoints on demand as the way to run a server without a policy,
    so doing that is operating Varve as documented. Showing a refusal the
    documented procedure avoids would understate Varve.
-8. **Raise `MaxAsOfDistance` above the snapshot's length** (this ADR's first
+8. **Checkpoint at least every `MaxAsOfDistance` commits during the import**
+   (also the second draft). Rejected in review: one checkpoint at the end
+   already serves all imported history at distance 0, and nothing reads the
+   dataset as of a position while the import runs. Checkpoints during the
+   import would cost import time against S1's target for no reader.
+9. **Raise `MaxAsOfDistance` above the snapshot's length** (this ADR's first
    draft). Rejected in review: the bound exists so that an as-of read never
    replays an unbounded log. Raising it past the snapshot disables it, and every
    slider move could then replay the whole log, which is the opposite of the
@@ -172,6 +198,8 @@ not a clock: an unlisted version's is `1900-01-01T00:00:00Z`.
   silently.
 - S3 depends on checkpoints, and the importer depends on the operator client
   holding `admin` on the dataset (ADR 0007).
+- S3's checks need a second, CI-only server configuration with
+  `MaxAsOfDistance` 0. It changes no step a viewer runs.
 - The importer does an operator's job until Varve's server can be configured
   to do it. The screen says so, and the Varve issue stays open for it.
 - A bump re-checks the bound's meaning, its default, and whether the server

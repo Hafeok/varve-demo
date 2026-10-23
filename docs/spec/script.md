@@ -182,10 +182,12 @@ outside the demo's subset are listed as such, never dropped.
 S2's question as of that moment and shows a different answer: a vulnerability
 not yet published, a version not yet deprecated. Every as-of answer shows the
 catalog time asked for, the Varve position it resolved to, and that position's
-Varve timestamp. It also shows where Varve started the read: "served from the
-extents up to checkpoint `c`, no log replayed", or "`n` commits replayed after
-checkpoint `c`". The viewer sees that time travel reads an index, not a
-replay of the whole log. Then a diff between two positions: the quads
+Varve timestamp. The screen states that an as-of read anywhere in history is
+served from checkpoints whose extents carry validity intervals, not by
+replaying the log. Each answer then shows where Varve started the read:
+"served from the extents up to checkpoint `c`, no log replayed", or "`n`
+commits replayed after checkpoint `c`". The viewer sees that time travel reads
+an index, not the whole log. Then a diff between two positions: the quads
 added and removed, grouped by package version.
 
 **Acceptance criteria**
@@ -202,25 +204,36 @@ added and removed, grouped by package version.
 4. For at least one committed pair of catalog times, the as-of answers differ
    from each other and each equals the independent reader's answer over the
    catalog leaves up to that time.
-5. Every as-of answer shows the checkpoint the read started from and the
-   commits replayed after it, derived from the checkpoint list and Varve's
-   rule (F3). CI checks the derivation against Varve: a request deliberately
-   beyond the bound is refused with `422`, and its `actual` equals the distance
-   the demo computes for that position.
-6. `MaxAsOfDistance` is Varve's default; the dataset is checkpointed at least
-   every `MaxAsOfDistance` commits during the import, so no position the
-   slider offers is refused. Varve's server cannot be configured with a
-   checkpoint policy (F3), so the importer takes the checkpoints with
+5. The screen states that an as-of read anywhere in history is served from
+   checkpoints with validity intervals. Every as-of answer shows the checkpoint
+   the read started from and the commits replayed after it, derived from the
+   checkpoint list and Varve's rule (F3).
+6. CI holds that derivation to Varve with a CI-only server whose
+   `MaxAsOfDistance` is 0, where Varve refuses any as-of read with a non-zero
+   distance and reports the distance as the `422`'s `actual`:
+   - before the final checkpoint, an as-of read at position `p` is refused with
+     `actual` equal to `p`, as the demo computes;
+   - after the final checkpoint, an as-of read at an early position succeeds,
+     so its distance is 0, by Varve's own check;
+   - a read above the newest checkpoint is refused with `actual` equal to its
+     distance from it.
+7. `MaxAsOfDistance` is Varve's default. The dataset is checkpointed once at
+   the end of the import, then whenever more than K commits have landed since
+   the last checkpoint. K is `VarveDemo:Checkpoints:EveryCommits`, below
+   `MaxAsOfDistance`, which the importer checks against the server's service
+   description at start. There are no checkpoints during the import. So no
+   position the slider offers is refused. Varve's server cannot be configured
+   with a checkpoint policy (F3), so the importer takes the checkpoints with
    `POST /manage/datasets/{name}/checkpoints` through the operator client, as
    Varve's operator guide documents (ADR 0004). The screen says the importer
    takes them, as the operator, and why, with the Varve issue linked. When
    Varve ships a server-side policy, the importer stops. *Varve issue to file:
    "a checkpoint policy configurable on the server".*
-7. The diff between two positions comes from Varve's diff over the protocol and
+8. The diff between two positions comes from Varve's diff over the protocol and
    equals the set difference of two as-of reads of the same graphs.
-8. Because a details leaf replaces its version's graph (ADR 0008), a diff shows
+9. Because a details leaf replaces its version's graph (ADR 0008), a diff shows
    effective changes only: CI checks it holds no quad both added and removed.
-9. Each as-of query and each diff is within the target.
+10. Each as-of query and each diff is within the target.
 
 **Target:** ≤ 2 s per as-of query or diff. **Check:** `S3_TimeTravelAndDiff`.
 
