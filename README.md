@@ -92,6 +92,7 @@ are ADRs ([index](docs/adr/README.md)), each with a decision set in
 - [0006 JSON-LD ingestion through `Varve.JsonLd`](docs/adr/0006-json-ld-ingestion-through-varve-jsonld.md)
 - [0007 Local authentication with a mock OIDC issuer](docs/adr/0007-local-authentication-with-a-mock-oidc-issuer.md)
 - [0008 The dataset and its mapping](docs/adr/0008-the-dataset-and-its-mapping.md)
+- [0009 S4's subscription path](docs/adr/0009-s4s-subscription-path.md)
 
 How the work is done is in [AGENTS.md](AGENTS.md).
 

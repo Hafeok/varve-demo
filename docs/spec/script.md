@@ -86,10 +86,14 @@ re-checks them.
 - **F4.** The sequencer assigns commit timestamps as `max(clock, head's)`, and
   no request supplies one. Over HTTP the commit's cause is the server-minted
   request id, and no header sets it or any other commit metadata.
-- **F5.** `SparqlHttpClient.FollowAsync` delivers **at least once** and resumes
-  from an `IFollowCheckpoint`: a crash between the handler's return and the
-  checkpoint's save hands the same commit over again. Its only filter is a
-  graph. The protocol's `/commits` resource also takes a `pattern` filter.
+- **F5.** `GET /commits` takes a `pattern` filter (three N-Triples terms, each
+  a term or `?name`) and resumes by position, exclusive (`from`, or
+  `Last-Event-ID`). A request with no `to` streams history and then the
+  present as one open range. A filtered-out commit is never a position the
+  client holds, so resuming after the last position applied misses nothing
+  (Varve's change-feed spec §4; source evidence in demo ADR 0009).
+  `SparqlHttpClient.FollowAsync` has the same at-least-once, resumable
+  contract, but its only filter is a graph.
 - **F6.** A store refuses to open a log whose hash chain does not verify
   (Varve ADR 0014). No public command, API or route verifies the chain on
   demand: verification happens as a side effect of opening.
@@ -210,25 +214,32 @@ delivery is shown, not hidden (F5).
 
 **Acceptance criteria**
 
-1. The subscriber follows the dataset through Varve's public client
-   (`FollowAsync`) with a file checkpoint, authenticated as the viewer role.
+1. The subscriber is `VarveDemo.PatternFeed`, this repository's own small
+   client, labelled as ours on screen (ADR 0009). It subscribes to
+   `GET /commits?pattern=…` as an open range, authenticated as the viewer
+   role, and keeps its position in a file checkpoint saved after each commit
+   is printed. The pattern is shown on screen.
 2. Every commit the importer acknowledged during the run is printed by the
    subscriber, in position order, with no gap other than positions the viewer
    role cannot read.
 3. CI kills the subscriber between a handler's return and its checkpoint's
    save, restarts it, and checks the redelivered commit is printed as a repeat
-   and nothing is missing.
+   and nothing is missing. It also kills the server mid-tail and restarts it;
+   the subscriber reconnects and resumes, with the same two checks. Repeats
+   are counted and the count is shown.
 4. The latency printed, from the importer's acknowledgement to the print, is
    within the target for every commit, measured on one clock.
 5. **Live** means a tail of the current catalog through the importer. Offline,
    or in CI, S4 replays the snapshot's tail at its original pace, and the
    screen says **REPLAY** on every line. CI runs the replay; the live mode is
    checked for starting and labelling only.
-6. **The pattern.** The brief asks for a *pattern* subscription. The protocol's
-   `/commits` takes a `pattern` filter, but `FollowAsync` filters by graph
-   only (F5). Until Varve's client takes a pattern, S4 subscribes by graph and
-   shows the gap with its Varve issue linked (C6). *Varve issue to file:
-   "`FollowOptions` has no pattern filter".*
+6. **The pattern is Varve's.** Every printed commit is one the server
+   delivered under the pattern; the subscriber filters nothing itself. CI
+   checks the printed changes equal the changes an independent reader of the
+   snapshot finds matching the pattern, commit by commit.
+7. Varve's own tests do not combine a pattern with resumption (ADR 0009). A
+   commit this check finds missed or out of order is a Varve issue with the
+   run as its reproduction, shown in S4, and never patched over in the client.
 
 **Target:** ≤ 5 s from a commit landing to the subscriber printing it.
 **Check:** `S4_LiveChangeFeed`.
@@ -346,3 +357,5 @@ To be filed against Varve, each with a reproduction (C6):
 1. **As-of by a declared domain clock** (ADR 0004; S3).
 2. **Verify a dataset's hash chain on demand** (F6; S6).
 3. **A checkpoint policy configurable on the server** (F3, ADR 0004; S3).
+4. **A pattern filter on `FollowAsync`**: a convenience, not a gap S4 shows
+   (F5, ADR 0009; S4).

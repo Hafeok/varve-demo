@@ -32,6 +32,7 @@
          first. They are here so that the pin has exactly one place. -->
     <PackageVersion Include="Varve.Protocol.Client" Version="$(VarveVersion)" Adr="0002" />
     <PackageVersion Include="Varve.JsonLd" Version="$(VarveVersion)" Adr="0006" />
+    <PackageVersion Include="Varve.Delta" Version="$(VarveVersion)" Adr="0009" />
   </ItemGroup>
 
   <ItemGroup Label="Decision-driven enforcement: build-time only, never shipped">
