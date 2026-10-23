@@ -23,10 +23,10 @@ public sealed partial class ConfigurationGates
     public void No_configuration_file_uses_anonymous_mode()
     {
         string[] offenders = [.. ConfigurationFiles()
-            .Where(static file => File.ReadAllText(file).Contains("--anonymous", StringComparison.Ordinal))
+            .Where(static file => AnonymousMode().IsMatch(File.ReadAllText(file)))
             .Select(RepositoryTree.Relative)];
 
-        Assert.True(offenders.Length == 0, "--anonymous in: " + string.Join(", ", offenders));
+        Assert.True(offenders.Length == 0, "Anonymous mode (--anonymous, or Auth:Mode Anonymous) in: " + string.Join(", ", offenders));
     }
 
     [Fact]
@@ -104,6 +104,13 @@ public sealed partial class ConfigurationGates
             }
         }
     }
+
+    /// <summary>
+    /// <c>--anonymous</c>, and the same mode by its configuration names: <c>--auth-mode Anonymous</c>,
+    /// <c>Varve:Auth:Mode</c> or <c>VARVE__AUTH__MODE</c> set to <c>Anonymous</c>, and a <c>"Mode": "Anonymous"</c> member.
+    /// </summary>
+    [GeneratedRegex(@"--anonymous\b|--auth-mode[ \t=]+[""']?anonymous|auth(?::|__)mode[""']?[ \t]*[:=][ \t]*[""']?anonymous|""mode""[ \t]*:[ \t]*""anonymous""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AnonymousMode();
 
     [GeneratedRegex(@"^[ \t-]*(?:image:|uses:[ \t]*docker://)[ \t]*(?<image>[^#\n]+)", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     private static partial Regex YamlImage();
