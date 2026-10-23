@@ -17,3 +17,4 @@ specification these decisions serve.
 | [0005](0005-the-browser-step-is-gated-by-a-measurement.md) | The browser step is gated by a measurement | Proposed |
 | [0006](0006-json-ld-ingestion-through-varve-jsonld.md) | JSON-LD ingestion through `Varve.JsonLd` | Proposed |
 | [0007](0007-local-authentication-with-a-mock-oidc-issuer.md) | Local authentication with a mock OIDC issuer | Proposed |
+| [0008](0008-the-dataset-and-its-mapping.md) | The dataset and its mapping | Proposed |
