@@ -11,3 +11,4 @@ specification these decisions serve.
 | # | Title | Status |
 |---:|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Proposed |
+| [0002](0002-consume-varve-only-as-released.md) | Consume Varve only as released | Proposed |
