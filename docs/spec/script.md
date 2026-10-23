@@ -75,10 +75,14 @@ re-checks them.
   carry `Varve-Request-Id` and no position.
 - **F3.** As-of reads take `Varve-As-Of: position:<n>` or
   `Varve-As-Of: time:<RFC 3339>`. The time form resolves to the greatest
-  position whose **Varve** commit timestamp is at or before it (ADR 0096). An
-  as-of read further than `Limits:MaxAsOfDistance` positions below the head
-  (default 10 000) is `422 as-of-distance-exceeded`; the demo's server sets it
-  above the snapshot's length, and says so in `compose.yaml`.
+  position whose **Varve** commit timestamp is at or before it (ADR 0096).
+  `Varve:Limits:MaxAsOfDistance` (default 10 000) bounds the commits an as-of
+  read replays: the distance from the nearest checkpoint at or below the
+  position, 0 at or below the newest checkpoint. Beyond it is
+  `422 as-of-distance-exceeded`, whose `actual` member is the distance (Varve
+  ADR 0114). The server takes no checkpoints by policy; an operator takes them
+  on demand. A dataset's checkpoints are listed by `GET …/status`, which needs
+  `admin` (demo ADR 0004).
 - **F4.** The sequencer assigns commit timestamps as `max(clock, head's)`, and
   no request supplies one. Over HTTP the commit's cause is the server-minted
   request id, and no header sets it or any other commit metadata.
@@ -153,9 +157,12 @@ outside the demo's subset are listed as such, never dropped.
 
 **The viewer sees** a slider over **catalog time** (ADR 0004). Moving it asks
 S2's question as of that moment and shows a different answer: a vulnerability
-not yet published, a version not yet deprecated. Every as-of answer shows three
-things: the catalog time asked for, the Varve position it resolved to, and that
-position's Varve timestamp. Then a diff between two positions: the quads
+not yet published, a version not yet deprecated. Every as-of answer shows the
+catalog time asked for, the Varve position it resolved to, and that position's
+Varve timestamp. It also shows where Varve started the read: "served from the
+extents up to checkpoint `c`, no log replayed", or "`n` commits replayed after
+checkpoint `c`". The viewer sees that time travel reads an index, not a
+replay of the whole log. Then a diff between two positions: the quads
 added and removed, grouped by package version.
 
 **Acceptance criteria**
@@ -172,11 +179,23 @@ added and removed, grouped by package version.
 4. For at least one committed pair of catalog times, the as-of answers differ
    from each other and each equals the independent reader's answer over the
    catalog leaves up to that time.
-5. The diff between two positions comes from Varve's diff over the protocol and
+5. Every as-of answer shows the checkpoint the read started from and the
+   commits replayed after it, derived from the checkpoint list and Varve's
+   rule (F3). CI checks the derivation against Varve: a request deliberately
+   beyond the bound is refused with `422`, and its `actual` equals the distance
+   the demo computes for that position.
+6. `MaxAsOfDistance` is Varve's default; the dataset is checkpointed at least
+   every `MaxAsOfDistance` commits during the import, so no position the
+   slider offers is refused. That needs a checkpoint policy on the server,
+   which Varve's server cannot be configured with (F3). Until it can, a
+   position beyond the bound is shown refused, with its Varve issue linked
+   (C6). *Varve issue to file: "a checkpoint policy configurable on the
+   server".*
+7. The diff between two positions comes from Varve's diff over the protocol and
    equals the set difference of two as-of reads of the same graphs.
-6. Because a details leaf replaces its version's graph (ADR 0008), a diff shows
+8. Because a details leaf replaces its version's graph (ADR 0008), a diff shows
    effective changes only: CI checks it holds no quad both added and removed.
-7. Each as-of query and each diff is within the target.
+9. Each as-of query and each diff is within the target.
 
 **Target:** ≤ 2 s per as-of query or diff. **Check:** `S3_TimeTravelAndDiff`.
 
@@ -326,4 +345,4 @@ To be filed against Varve, each with a reproduction (C6):
 
 1. **As-of by a declared domain clock** (ADR 0004; S3).
 2. **Verify a dataset's hash chain on demand** (F6; S6).
-3. **A pattern filter on `FollowAsync`** (F5; S4).
+3. **A checkpoint policy configurable on the server** (F3, ADR 0004; S3).

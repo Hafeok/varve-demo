@@ -11,8 +11,12 @@ decisions:
     statement: "Catalog time resolves through a disposable index of catalog time and position folded from the change feed with FollowAsync, read with Varve-As-Of position"
   - key: IndexCrossCheckedByBinarySearch
     statement: "CI cross-checks the time index against binary search over as-of reads of the catalog-log graph"
-  - key: AsOfDistanceAboveSnapshot
-    statement: "The server sets Limits MaxAsOfDistance above the snapshot commit count so the slider reaches the start of history"
+  - key: AsOfAnswerShowsItsCheckpoint
+    statement: "Every as-of answer shows the checkpoint the read started from and how many commits Varve replayed after it, and CI holds that derivation to the actual distance in Varve's 422"
+  - key: CheckpointAtLeastEveryMaxAsOfDistance
+    statement: "MaxAsOfDistance stays at Varve's default, and the dataset is checkpointed at least every MaxAsOfDistance commits during import by a server-side checkpoint policy"
+  - key: ServerCheckpointPolicyIsAVarveIssue
+    statement: "A checkpoint policy configurable on the server is filed as a Varve issue, and until it ships S3 shows the as-of-distance refusal it cannot avoid"
   - key: DomainClockIsAVarveIssue
     statement: "As-of by a declared domain clock is filed as a Varve issue, and the index goes if Varve ships it"
 ---
