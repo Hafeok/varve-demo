@@ -2,8 +2,9 @@
 
 ## Status
 
-**Proposed — filed unaccepted by session 01 of #1, 2026-10-23.** Acceptance is
-the maintainer's act on the pull request. Its decision set is
+**Accepted — by the maintainer on 2026-10-26, on the foundation's pull request
+[#2](https://github.com/Hafeok/varve-demo/pull/2).** Filed by session 01 of
+#1, 2026-10-23. Its decision set is
 [`record-architecture-decisions`](../decisions/record-architecture-decisions.md).
 
 ## Context
