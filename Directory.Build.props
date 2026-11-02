@@ -1,0 +1,50 @@
+<Project>
+
+  <!--
+    Repository-wide build settings, taken from Varve's (ADR 0003). Imported
+    before every project body, so a project may set any of them again.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+
+    <!-- Usings are explicit: a file's dependencies are visible in the file. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- IDE0005 needs it at build time. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Two builds of one commit produce the same bytes. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' != ''">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Nothing here is a NuGet package. What ships is an image (ADR 0003). -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    DecisionDriven.Analyzers (ADR 0003): the DD rules, and the generator that
+    turns docs/decisions/ into the types code cites. Build-time only.
+  -->
+  <ItemGroup>
+    <PackageReference Include="DecisionDriven.Analyzers" PrivateAssets="all" IncludeAssets="analyzers;build" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ArchFamily>VarveDemo</ArchFamily>
+    <DdLedgerDirectory>$(MSBuildThisFileDirectory)docs/decisions</DdLedgerDirectory>
+  </PropertyGroup>
+
+</Project>

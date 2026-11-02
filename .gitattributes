@@ -1,0 +1,13 @@
+# LF in the working tree everywhere. The snapshot's JSON and the RDF the
+# importer writes are data; they must never meet CRLF as an artefact of how the
+# repository was cloned.
+* text=auto eol=lf
+
+# Binary by extension, never normalised.
+*.png     binary
+*.jpg     binary
+*.ico     binary
+*.nupkg   binary
+*.br      binary
+*.gz      binary
+*.zst     binary

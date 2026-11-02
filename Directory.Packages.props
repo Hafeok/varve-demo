@@ -1,0 +1,47 @@
+<Project>
+
+  <!--
+    Central package management, and the register of every package dependency.
+    Project files carry no Version attribute. Every PackageVersion carries
+    Adr="NNNN", the decision that admits it, and the spec tests fail the build
+    of the gates when one is missing or cites an ADR that does not exist
+    (ADR 0001, ADR 0003).
+
+    Versions are resolved from nuget.org when a package is added or bumped,
+    never taken from memory.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!--
+    THE VARVE PIN (ADR 0002). One property, the latest Varve release, resolved
+    from nuget.org on 2026-10-23. compose.yaml's image tag must equal
+    v$(VarveVersion); a spec test holds the two together once compose.yaml
+    exists. A bump is one pull request that reruns every check and
+    regenerates the evidence page.
+  -->
+  <PropertyGroup>
+    <VarveVersion>0.1.0-preview.11</VarveVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Varve, as released (ADR 0002)">
+    <!-- No project references these yet; slice 1's importer and checks are the
+         first. They are here so that the pin has exactly one place. -->
+    <PackageVersion Include="Varve.Protocol.Client" Version="$(VarveVersion)" Adr="0002" />
+    <PackageVersion Include="Varve.JsonLd" Version="$(VarveVersion)" Adr="0006" />
+    <PackageVersion Include="Varve.Delta" Version="$(VarveVersion)" Adr="0009" />
+  </ItemGroup>
+
+  <ItemGroup Label="Decision-driven enforcement: build-time only, never shipped">
+    <PackageVersion Include="DecisionDriven.Analyzers" Version="0.1.0-preview.8" Adr="0003" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests: xunit.v3 on Microsoft Testing Platform (ADR 0003)">
+    <PackageVersion Include="xunit.v3" Version="4.0.2" Adr="0003" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.1" Adr="0003" />
+  </ItemGroup>
+
+</Project>

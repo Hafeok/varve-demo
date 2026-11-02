@@ -1,0 +1,13 @@
+varve-demo
+
+Copyright 2026 Emil Okkels Klein
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+varve-demo consumes Varve (https://github.com/Hafeok/Varve) as released
+packages and container images, and contains none of its source.
+
+See docs/adr/0003-conventions-taken-from-varve.md for why this licence was
+chosen.
