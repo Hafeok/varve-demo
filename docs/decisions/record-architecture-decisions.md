@@ -23,8 +23,13 @@ decisions:
     statement: "A decision that can be checked mechanically is checked by a test in tests/VarveDemo.Spec.Tests that the ADR names"
     accepted-by: mailto:emil@okkels-klein.dk
     accepted-at: 2026-10-26T11:49:23Z
+  - key: AcceptanceTranscribedOnlyOnInstruction
+    statement: "A session never writes accepted-by for a decision it filed; another session may transcribe an acceptance only at the maintainer's explicit instruction, with his identity and timestamp, recorded in its traceability record"
 ---
 
 The rulings of [ADR 0001](../adr/0001-record-architecture-decisions.md), filed by session 01 of #1 on
 2026-10-23 and accepted by the maintainer on 2026-10-26, on the foundation's
 pull request #2. Every ruling carries `accepted-by` and `accepted-at`.
+
+`AcceptanceTranscribedOnlyOnInstruction` is the 2026-11-03 amendment's
+ruling, filed unaccepted by session 03 on #3.

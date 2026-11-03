@@ -76,3 +76,38 @@ ADR, a register of dependencies that cites ADRs, and dated amendments.
   as a known red on its pull request.
 - The GitHub Actions in `.github/workflows/ci.yml` are dependencies under point
   3; this ADR set admits none of them on its own, so ADR 0003 does.
+
+## Amendment, 2026-11-03: who writes `accepted-by` (proposed, unaccepted)
+
+Filed unaccepted by session 03, on #3, at the maintainer's request. This
+amendment is a proposal until the maintainer accepts its ruling; until then
+point 2 reads as written.
+
+**Why.** Point 2 says a session "never writes `accepted-by`". Session 02 (#1,
+its record `docs/traceability/2026-10-26-issue-1-accept-the-foundation-adrs.md`)
+wrote it for all nine ADRs, at the maintainer's explicit instruction, with the
+identity and timestamp he gave, and recorded that as a departure from this
+rule. What the rule protects is narrower than its wording: a session must not
+accept its own proposals. Varve's own rule is worded that way: "A session
+never writes `accepted-by` for a decision it filed" (Varve's
+`docs/decisions/README.md`), and its ADR 0066 point 7 allows a session to
+transcribe an acceptance that already exists.
+
+**The rule, as proposed.**
+
+1. A session never writes `accepted-by` or `accepted-at` for a decision it
+   filed, on its own initiative, or on an instruction that does not come from
+   the maintainer.
+2. A later session may **transcribe** an acceptance when the maintainer
+   explicitly instructs it to, giving his identity and the timestamp. The
+   session writes exactly the values he gave, and nothing else. Its
+   traceability record quotes the instruction verbatim (as every record
+   quotes its prompt), names the decisions it transcribed, and says it is a
+   transcription.
+3. The session that filed a decision never transcribes its acceptance, even on
+   instruction: another session does, so the act of filing and the record of
+   acceptance are never in one session's hands.
+
+Its ruling is `AcceptanceTranscribedOnlyOnInstruction` in this ADR's set,
+filed unaccepted. When accepted, `AGENTS.md`'s wording below already matches
+it, and `docs/decisions/README.md`'s line follows.
