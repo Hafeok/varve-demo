@@ -117,10 +117,18 @@ distance rule. A bump re-checks them.
 
 **The viewer sees** one command, `docker compose up`, on a machine with only
 Docker. The mock issuer starts, the Varve server starts, and the importer
-authenticates and replays the snapshot over HTTP, one Varve commit per catalog
-commit, printing commits per second and quads per second as it goes. It names
-the snapshot's two parameters, N and the catalog time window, so the viewer
-knows what history is loaded. It takes the final checkpoint, as the
+authenticates. It loads the snapshot over HTTP in two parts, printing commits
+per second and quads per second for each:
+
+- **the base**: the catalog's state of the N packages as of the window's lower
+  bound T0, one Varve commit per package;
+- **the window**: every catalog commit from T0 to the snapshot date, one Varve
+  commit per catalog commit.
+
+It names N, T0 and the window, and says plainly that the base is the catalog's
+state as of T0 and that history before T0 is not replayed;
+`varve-demo import --since <date>` replays it from any date (ADR 0008's
+amendment). It takes the final checkpoint, as the
 dataset's admin, and says so. The first answer then prints: the number of
 catalog commits the dataset holds, which the snapshot's manifest predicts,
 with the query beside it. CI measures the time from the command to that
@@ -138,23 +146,26 @@ for slice 1a made it the count, so S1 needs no lock file.)
    importer image's (ADR 0011).
 3. The server runs with OIDC authentication against the mock issuer; a request
    without a token is `401`.
-4. The load is a **full replay** (ADR 0008): every catalog commit the
-   snapshot retains is sent as one SPARQL Update, authenticated as the
-   importer, in catalog order. There is no bulk load and no base.
-5. The load rate printed (commits/s and quads/s) is computed from the run's own
-   wall clock and the counts the server acknowledged, and CI checks it equals
-   the counts in the snapshot's manifest divided by the elapsed time printed,
-   within rounding.
+4. The load is the **base, then a full replay of the window** (ADR 0008 and
+   its amendment). Each package's base is sent as one SPARQL Update, then
+   every catalog commit the window retains as one SPARQL Update, in catalog
+   order, all authenticated as the importer. There is no bulk load.
+5. The load rate printed (commits/s and quads/s), for the base and for the
+   window, is computed from the run's own wall clock and the counts the server
+   acknowledged. CI checks it equals the counts in the snapshot's manifest
+   divided by the elapsed time printed, within rounding.
 6. After the load, the importer's acknowledged commits number exactly the
-   manifest's retained catalog commits, each acknowledged with its own
+   manifest's base packages plus its retained catalog commits, each
+   acknowledged with its own
    `Varve-Position`, strictly increasing; every one carries the importer's
    agent, read from its feed record's `agent` line and equal to the importer
    token's issuer and subject (ADR 0007, `EveryWriteCarriesItsAgent`); and
-   `<urn:varve-demo:catalog-log>` holds one assertion per retained catalog
-   commit.
-7. The manifest states N (3 000) and the catalog time window, and the screen
-   shows both. The window's lower bound is the one ADR 0008 records from the
-   catalog; its upper bound is the snapshot date.
+   `<urn:varve-demo:catalog-log>` holds one base state per package and one
+   assertion per retained catalog commit.
+7. The manifest states N (3 000), the window and the base's counts, and the
+   screen shows N, the window and that the base is the state as of T0. T0 is
+   the one ADR 0008's amendment records; the upper bound is the snapshot
+   date.
 8. The time from `docker compose up` to the first answer, excluding image
    pulls (measured from the first container's start), is within the target.
    If it is not, the window is tuned, never N (ADR 0008); if no window that
@@ -177,10 +188,11 @@ outside the demo's subset are listed as such, never dropped.
 apply them (amended 2026-11-03, #5):
 
 - A locked version is **in the snapshot** when its version's graph exists
-  after the snapshot's last commit. Otherwise it is **outside the subset**,
-  for one of two reasons, which the answer states: its id is not among the
-  top N, or the snapshot's window holds no leaf for that version (ADR 0008's
-  amendment of 2026-11-03).
+  after the snapshot's last commit, base or window. **Outside the subset**
+  means its id is not among the top N. A version of one of the N packages
+  that the catalog had not published by the snapshot's upper bound is also
+  reported outside, with that reason stated, since there is nothing to say
+  about it.
 - It is **deprecated** when its leaf has a `deprecation`, and **vulnerable**
   when it has a `vulnerability`. Either one puts it in **flagged**; neither
   puts it in **clean**.
@@ -192,9 +204,6 @@ apply them (amended 2026-11-03, #5):
     deprecated nor vulnerable, and is a release unless the locked version is
     a prerelease;
   - otherwise none, said so.
-
-  The snapshot holds only what its window touched, so "lowest" is lowest
-  among those versions, and the README says so.
 
 **Acceptance criteria**
 
@@ -215,7 +224,9 @@ apply them (amended 2026-11-03, #5):
 
 ## S3 — Time travel and diff
 
-**The viewer sees** a slider over **catalog time** (ADR 0004). Moving it asks
+**The viewer sees** a slider over **catalog time** (ADR 0004), starting at
+T0: the screen says the base is the catalog's state as of T0 and that history
+before T0 is not replayed (ADR 0008's amendment). Moving it asks
 S2's question as of that moment and shows a different answer: a vulnerability
 not yet published, a version not yet deprecated. Every as-of answer shows the
 catalog time asked for, the Varve position it resolved to, and that position's

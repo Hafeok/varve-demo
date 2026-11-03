@@ -68,15 +68,25 @@ and its amendment):
 The importer process holds the importer's and the checkpointer's
 credentials. With the mock issuer these are client ids with no real secret.
 
-**What history is loaded.** The snapshot is the catalog leaves of the top
-3 000 packages by downloads, from **2026-10-20 to 2026-11-03**, pinned by
-hash ([`snapshot/manifest.json`](snapshot/manifest.json)). That is
-1 731 catalog commits and 1 753 337 quads. The catalog carries deprecation
-data from 2019 and vulnerability data from 2020. Replaying from there takes
-hours, not minutes, so S1's window is two weeks. A version with no leaf in
-those two weeks is reported as outside the subset, never as clean
-([ADR 0008](docs/adr/0008-the-dataset-and-its-mapping.md), amendment of
-2026-11-03).
+**What history is loaded.** The snapshot covers the top 3 000 packages by
+downloads, pinned by hash ([`snapshot/manifest.json`](snapshot/manifest.json)),
+in two parts ([ADR 0008](docs/adr/0008-the-dataset-and-its-mapping.md),
+amendment of 2026-11-03):
+
+- **the base**: every version of those packages as the catalog stood on
+  **2026-10-20**, loaded one Varve commit per package;
+- **the window**: every catalog commit from 2026-10-20 to 2026-11-03,
+  replayed one Varve commit each, as the catalog made them.
+
+History before 2026-10-20 is not replayed, and time travel starts there.
+
+```bash
+varve-demo import --since 2019-09-23
+```
+
+That replays the catalog from any date, with no base. From the first
+deprecation data in 2019 it takes far longer than S1's target; the measured
+time is in ADR 0008's amendment.
 
 **Names.** The catalog's JSON-LD is read by Varve's own reader,
 `Varve.JsonLd`, with the catalog's own terms. The few names the demo adds

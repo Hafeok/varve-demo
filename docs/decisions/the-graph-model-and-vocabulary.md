@@ -17,8 +17,15 @@ decisions:
     statement: "The S2 oracle orders versions with NuGet.Versioning, a test-only package, and CI checks that it and the version key agree on every version in the snapshot"
   - key: NoOtherDerivedData
     statement: "Deprecation, vulnerability, listing and prerelease status are read by queries from the catalog's own terms, never from a derived flag"
+  - key: LeafProjectedToWhatTheStepsRead
+    statement: "The snapshot keeps of each leaf its inline context, its @id and the members id, version, listed, isPrerelease, deprecation and vulnerabilities, and the importer and the oracle both read that projection"
+  - key: BaseStateInTheCatalogLog
+    statement: "Each base commit asserts urn:varve-demo:base:id in urn:varve-demo:catalog-log with vd:basePackage and vd:baseAsOf T0, so the time index places the base at T0"
 ---
 
 The rulings of [ADR 0010](../adr/0010-the-graph-model-and-vocabulary.md), filed
 unaccepted by session 03 on #5, 2026-11-03. Every citation is `CS0618` until
 the maintainer accepts them.
+
+`LeafProjectedToWhatTheStepsRead` and `BaseStateInTheCatalogLog` are the
+2026-11-03 amendment's rulings, filed unaccepted by session 03 on #5.
