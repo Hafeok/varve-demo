@@ -51,12 +51,14 @@ file and Dockerfile.
    point 6). The step checks run against that tag, by the digest the push
    returned. A `pr-` tag is not a release and may be deleted.
 6. **Publishing happens on `main`.** A push to `main` builds the image and
-   tags it `main-<sha>`. It then attests build provenance for the digest
-   with `actions/attest-build-provenance`, which this ADR admits at the SHA
-   Varve's `publish.yml` pins. Before any step uses one of our images, CI
-   verifies the image with
+   tags it `main-<sha>`. **Every image CI pushes is attested**, a pull
+   request's `pr-<sha>` included. Its build provenance is attested for the
+   digest with `actions/attest-build-provenance`, which this ADR admits at the
+   SHA Varve's `publish.yml` pins. Before a step uses the image, CI verifies it
+   with
    `gh attestation verify oci://ghcr.io/hafeok/varve-demo-<name>@<digest> --owner hafeok`,
-   as ADR 0002 requires for Varve's.
+   as ADR 0002 requires for Varve's. The Varve image is verified the same way
+   in the same job.
 7. **`compose.yaml` names the image by tag and digest.** Its digest moves in
    a commit of its own after an image is published. Until the first
    publish from `main`, it names the `pr-<sha>` build of this slice's pull
@@ -85,8 +87,10 @@ file and Dockerfile.
 
 - The demo's images carry one pull from MCR, in our build only. A viewer
   pulls only from GHCR.
-- CI needs `packages: write` on the pull request's build of the image and on
-  `main`, and `attestations: write` and `id-token: write` on `main`.
+- The steps job needs `packages: write`, `attestations: write` and
+  `id-token: write`. A pull request from a fork has none of them, so its
+  steps job cannot push or attest, and fails at that step; the maintainer
+  runs it from a branch of this repository instead.
 - A new package on GHCR is private until the owner makes it public; the
   maintainer makes `varve-demo-importer` public once, and the README says
   that a clean machine needs it to be.

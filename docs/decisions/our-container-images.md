@@ -14,7 +14,7 @@ decisions:
   - key: PullRequestImageTaggedPrSha
     statement: "A pull request's CI builds the image from the published binary, pushes it as pr-sha, and runs the step checks against that tag by digest"
   - key: PublishOnMainAttested
-    statement: "A push to main publishes main-sha with build provenance attested, and CI verifies our images' attestations before a step uses them, as ADR 0002 requires for Varve's"
+    statement: "A push to main publishes main-sha; every image CI pushes is attested with build provenance and verified before a step uses it, as ADR 0002 requires for Varve's"
   - key: ComposePinMovesInItsOwnCommit
     statement: "compose.yaml names our image by tag and digest, and the digest moves in a commit of its own after an image is published"
 ---
