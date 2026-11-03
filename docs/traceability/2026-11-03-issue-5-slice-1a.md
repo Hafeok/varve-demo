@@ -60,11 +60,94 @@ Then carry on as planned. Report back with the projection, the snapshot size, th
 
 ## Report
 
-**In progress.** This record is filed before CI has run the step checks:
-the importer image's push to GHCR was refused (`denied`), and the
-maintainer is changing the permission. CI's numbers and the final report
-are added when the checks run. The local numbers are in ADR 0008's
-amendment and in the pull request.
+Slice 1a, finished on the maintainer's rulings above.
+
+### Results, from CI
+
+[Run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366),
+on `c886d5f`, the measurements in its `step-measurements` artifact:
+
+| | Measured | Target |
+|---|---|---|
+| S1, `docker compose up` to the first answer | 102.7 s | ≤ 180 s |
+| S1, base | 62.8 s: 3 000 commits, 3 018 866 quads | |
+| S1, window | 12.1 s: 1 731 commits, 36 128 quads, 143.4 commits/s | |
+| S1, again through the installed tool | base 54.8 s, window 6.8 s | |
+| S2, sample lock file | 81 ms | ≤ 2 s |
+| S2, generated lock file | 70 ms | ≤ 2 s |
+| S2 against the oracle | agree, field by field, on both | |
+
+In that run the snapshot was rebuilt (this pull request changes
+`snapshot/`), so S1 mounted it. A run that does not rebuild downloads the
+22.5 MB asset inside S1's time; locally that added under a second.
+
+**The snapshot**, `edb36caa…`:
+
+| | |
+|---|---|
+| base | 3 000 packages, 512 390 versions (46 deleted before T0), 3 018 866 quads |
+| window | 1 731 catalog commits (27 138 skipped), 5 255 leaves, 36 128 quads |
+| files | 661 MB on disk, 22.5 MB packed |
+| rebuilt from nuget.org | 24 min 50 s locally; CI's rebuild matched the manifest |
+
+**Memory.** The S1 check, in CI:
+
+- 49 MB at start;
+- 343 MB at the end of the import, before the final checkpoint;
+- 963 MB after it;
+- 125 MB after a restart.
+
+Under 512 MB the import is refused at base commit 1 068 (`503`), the dataset
+does not reopen under the limit within 60 s, and without the limit it
+reopens with all 1 067 acknowledged commits. ADR 0004's amendment has the
+rest. A checkpoint during the import was measured not to help, so none is
+proposed.
+
+**The deep history**, `import --since 2019-09-23`: 63.7 min in all. That is
+about 33 min to build it from nuget.org, then 237 766 commits and 13.6M quads
+replayed in 28.7 min, and a 122 s checkpoint. The server peaked at 4.5 GB.
+
+### ADRs and amendments, all unaccepted
+
+- **New:**
+  - 0010, the graph model and vocabulary, with the advisory-state amendment;
+  - 0011, our container images;
+  - 0012, the demo tool.
+- **Amended:**
+  - 0004: the checkpoint key superseded, the base at T0, memory;
+  - 0006: contexts are inline, and a remote one fails;
+  - 0007: least privilege, the checkpointer client, the operator's key
+    superseded;
+  - 0008: the window, the base, the projection, the deep history, CI's
+    rebuild policy.
+- **Keys superseded:** six accepted keys moved out of their sets under new
+  ones, each kept in its set's notes.
+
+### Where this departs from a ruling, or adds to one
+
+1. **Memory checkpoints.** Ruling 3 of the second message asked for
+   checkpoints during long imports if the import failed under 512 MB. It
+   failed, but by refusal, not OOM kill. Checkpoints every 250 commits were
+   measured not to change where it fails, so they are not proposed. The
+   importer keeps the option, off by default, so the measurement can be
+   repeated.
+2. **`ImportUnderAMemoryLimit` passes while the import is refused.** It
+   records the refusal and fails only if an acknowledged commit is lost. A
+   red check for a Varve limit the demo shows would block every pull request.
+   The maintainer may prefer it red.
+3. **`isPrerelease` is not kept.** The ruling's list of kept properties does
+   not name it. The query derives prerelease from the version key, and the
+   oracle from `NuGet.Versioning`.
+4. **`vd:packageId`, a second derived term.** Without it S2 took 14 s to
+   27 s on the full base. It is identity, not a flag (ADR 0010's amendment).
+5. **S2's query is asked per package with constants**, joined by `UNION`,
+   not with `VALUES`. With `VALUES`, Varve's planner starts from the wrong
+   pattern (Varve issue draft 2). This shapes the query for the engine; it
+   is said in `deps.rq` and here.
+6. **S2's "outside the subset"** also covers a version of one of the N
+   packages that the catalog had not published by the snapshot's upper
+   bound, with that reason stated. There is nothing else to say about such a
+   version.
 
 ### How the window's bound was found
 

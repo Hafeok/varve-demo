@@ -26,8 +26,8 @@ brings its evidence.
 <!-- spec-table:begin -->
 | Step | Title | Target | Check | State |
 |---|---|---|---|---|
-| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded | S1_ZeroToQuery | pending |
-| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query | S2_DeprecatedAndVulnerableDependencies | pending |
+| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded; measured in CI: 102.7 s ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S1_ZeroToQuery | passing |
+| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query; measured in CI: 81 ms and 70 ms ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S2_DeprecatedAndVulnerableDependencies | passing |
 | S3 | Time travel and diff | ≤ 2 s per as-of query or diff | S3_TimeTravelAndDiff | pending |
 | S4 | Live change feed | ≤ 5 s from a commit landing to the subscriber printing it | S4_LiveChangeFeed | pending |
 | S5 | The same log in the browser | set by ADR 0005's measurement | S5_SameLogInTheBrowser | pending |

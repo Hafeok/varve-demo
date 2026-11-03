@@ -19,13 +19,28 @@ append-only log, the NuGet catalog:
 - the same engine answering the same query in the browser, offline;
 - the database as files you can clone.
 
-## Status: S1 and S2 are built, not yet passing
+## Status: S1 and S2 pass
 
-S1 and S2 are built, and their checks pass on a local run. They become
-`passing` when CI runs them end to end against a released Varve. That waits
-on the importer image being published to GHCR, which `compose.yaml` pins by
-digest; `compose.yaml` lands with that digest. Every other step is
-`pending`.
+**S1 and S2 pass**, end to end, in CI on every pull request, against Varve
+`0.1.0-preview.15` ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)):
+
+- **S1:** 102.7 s from `docker compose up` to the first answer, against
+  3 minutes.
+- **S2:** 81 ms and 70 ms per query, against 2 s, and the answers agree with
+  an independent reader of the snapshot.
+
+Every other step is `pending`.
+
+**Memory.** Measured in the same CI run:
+
+- **Without a limit:** the server's resident memory reached 963 MB after the
+  final checkpoint, and went back to 125 MB after a restart.
+- **Under a 512 MB limit:** the import is refused part-way, and nothing
+  acknowledged is lost.
+
+The numbers and a Varve issue draft are in
+[ADR 0004](docs/adr/0004-the-time-travel-clock.md)'s amendment. Give Docker
+at least 2 GB.
 
 ## Run it
 
@@ -118,8 +133,8 @@ test that runs it end to end.
 <!-- spec-table:begin -->
 | Step | Title | Target | Check | State |
 |---|---|---|---|---|
-| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded | S1_ZeroToQuery | pending |
-| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query | S2_DeprecatedAndVulnerableDependencies | pending |
+| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded; measured in CI: 102.7 s ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S1_ZeroToQuery | passing |
+| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query; measured in CI: 81 ms and 70 ms ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S2_DeprecatedAndVulnerableDependencies | passing |
 | S3 | Time travel and diff | ≤ 2 s per as-of query or diff | S3_TimeTravelAndDiff | pending |
 | S4 | Live change feed | ≤ 5 s from a commit landing to the subscriber printing it | S4_LiveChangeFeed | pending |
 | S5 | The same log in the browser | set by ADR 0005's measurement | S5_SameLogInTheBrowser | pending |
