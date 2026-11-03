@@ -27,7 +27,7 @@ internal static partial class StepCommands
         await Console.Out.WriteLineAsync(query).ConfigureAwait(false);
         SelectAnswer answer = await SparqlSelect.RunAsync(connection.Server.Client(viewer, TimeSpan.FromMinutes(1)), query, cancellationToken).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture,
-            $"answer: {answer.Solutions[0]["catalogCommits"]} catalog commits at position {answer.Position}, in {answer.Elapsed.TotalMilliseconds:0} ms")).ConfigureAwait(false);
+            $"answer: {answer.Solutions[0]["baseStates"]} base states and {answer.Solutions[0]["catalogCommits"]} catalog commits at position {answer.Position}, in {answer.Elapsed.TotalMilliseconds:0} ms")).ConfigureAwait(false);
         return 0;
     }
 

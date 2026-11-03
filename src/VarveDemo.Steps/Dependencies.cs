@@ -187,7 +187,7 @@ public static class Dependencies
                 Id = id,
                 Version = version,
                 Group = DependencyGroup.Outside,
-                OutsideReason = top.Contains(id) ? "no leaf in the snapshot's window" : "not among the top " + top.Count.ToString(CultureInfo.InvariantCulture) + " packages",
+                OutsideReason = top.Contains(id) ? "version not in the catalog by the snapshot's upper bound" : "not among the top " + top.Count.ToString(CultureInfo.InvariantCulture) + " packages",
                 Deprecated = false,
                 DeprecationReasons = [],
                 Advisories = [],

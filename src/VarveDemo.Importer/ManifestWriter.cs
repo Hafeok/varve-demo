@@ -46,22 +46,52 @@ public static class ManifestWriter
                 VersionsPresent = 0,
                 Quads = 0,
             },
-            RemoteContexts = draft.RemoteContexts,
+            Base = null,
             InlineContexts = draft.InlineContexts,
             Files = files,
         };
 
-        SnapshotReader reader = SnapshotReader.OpenUnverified(directory, provisional);
-        CatalogUpdate mapper = new(reader.RemoteContexts());
+        SnapshotReader reader = SnapshotReader.OpenUnverified(directory, provisional with
+        {
+            Base = inputs.Base ? new BaseCounts { Packages = 0, Versions = 0, DeletedBefore = 0, Quads = 0, Sha256 = string.Empty } : null,
+        });
+        BaseCounts? baseCounts = null;
+        HashSet<string> present = new(StringComparer.Ordinal);
+        if (inputs.Base)
+        {
+            long baseQuads = 0;
+            long baseVersions = 0;
+            long basePackages = 0;
+            await foreach (SnapshotBasePackage package in reader.BaseAsync(cancellationToken).ConfigureAwait(false))
+            {
+                baseQuads += CatalogUpdate.CountBaseQuads(package, inputs.From);
+                baseVersions += package.Leaves.Count;
+                foreach (SnapshotLeaf leaf in package.Leaves)
+                {
+                    present.Add(DemoNames.VersionGraph(leaf.Ref.Id, leaf.Ref.Version));
+                }
+
+                basePackages++;
+            }
+
+            baseCounts = new BaseCounts
+            {
+                Packages = basePackages,
+                Versions = baseVersions,
+                DeletedBefore = draft.DeletedBeforeFrom,
+                Quads = baseQuads,
+                Sha256 = Sha256Text.Of(Encoding.UTF8.GetBytes(SnapshotManifest.HashList(files.Where(static f => SnapshotManifest.BaseFiles.Contains(f.Path))))),
+            };
+        }
+
         long quads = 0;
         long details = 0;
         long deletes = 0;
         HashSet<string> packages = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> versions = new(StringComparer.Ordinal);
-        HashSet<string> present = new(StringComparer.Ordinal);
         await foreach (SnapshotCommit commit in reader.CommitsAsync(cancellationToken).ConfigureAwait(false))
         {
-            quads += mapper.CountQuads(commit);
+            quads += CatalogUpdate.CountQuads(commit);
             foreach (SnapshotLeaf leaf in commit.Leaves)
             {
                 string graph = DemoNames.VersionGraph(leaf.Ref.Id, leaf.Ref.Version);
@@ -82,6 +112,7 @@ public static class ManifestWriter
 
         return provisional with
         {
+            Base = baseCounts,
             Counts = provisional.Counts with
             {
                 Leaves = details + deletes,
@@ -104,6 +135,11 @@ public static class ManifestWriter
         if (!string.Equals(expected.Sha256, actual.Sha256, StringComparison.Ordinal))
         {
             differences.Add("sha256: " + expected.Sha256 + " committed, " + actual.Sha256 + " rebuilt");
+        }
+
+        if (expected.Base != actual.Base)
+        {
+            differences.Add("base: " + expected.Base + " committed, " + actual.Base + " rebuilt");
         }
 
         if (expected.Counts != actual.Counts)

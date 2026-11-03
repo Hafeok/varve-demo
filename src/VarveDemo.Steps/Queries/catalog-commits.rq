@@ -1,10 +1,15 @@
-# S1's first answer: the catalog commits the dataset holds, one per retained
-# catalog commit of the snapshot (ADRs 0004, 0010). The manifest predicts it.
+# S1's first answer: what the catalog log holds. One base state per package,
+# the catalog's state as of the window's lower bound (ADR 0008's amendment),
+# and one catalog commit per retained catalog commit of the window (ADRs 0004,
+# 0010). The manifest predicts both.
 PREFIX catalog: <http://schema.nuget.org/catalog#>
+PREFIX vd: <urn:varve-demo:term:>
 
-SELECT (COUNT(?commit) AS ?catalogCommits)
+SELECT (COUNT(DISTINCT ?base) AS ?baseStates) (COUNT(DISTINCT ?commit) AS ?catalogCommits)
 WHERE {
   GRAPH <urn:varve-demo:catalog-log> {
-    ?commit catalog:commitId ?commitId .
+    { ?base vd:basePackage ?package . }
+    UNION
+    { ?commit catalog:commitId ?commitId . }
   }
 }

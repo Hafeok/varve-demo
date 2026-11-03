@@ -18,6 +18,12 @@ namespace VarveDemo.Snapshot;
 /// <param name="Json">The leaf's JSON, one line, UTF-8.</param>
 public sealed record SnapshotLeaf(CatalogLeafRef Ref, ReadOnlyMemory<byte> Json);
 
+/// <summary>One package of the base, with its versions' leaves, as a reader replays it.</summary>
+/// <param name="Sequence">Its place in the base, from 1.</param>
+/// <param name="Id">The package id, lower case.</param>
+/// <param name="Leaves">One leaf per version present at the lower bound.</param>
+public sealed record SnapshotBasePackage(long Sequence, string Id, IReadOnlyList<SnapshotLeaf> Leaves);
+
 /// <summary>One retained catalog commit, with its leaves' JSON, as a reader replays it.</summary>
 /// <param name="Sequence">Its place in the snapshot, from 1.</param>
 /// <param name="Commit">The commit as <c>commits.ndjson</c> states it.</param>
@@ -87,9 +93,38 @@ public sealed class SnapshotReader
         }
     }
 
-    /// <summary>The remote context documents, by IRI, as recorded.</summary>
-    public IReadOnlyDictionary<string, byte[]> RemoteContexts() =>
-        Manifest.RemoteContexts.ToDictionary(static context => context.Iri, context => File.ReadAllBytes(Path.Combine(Directory, context.Path)), StringComparer.Ordinal);
+    /// <summary>The base, one package at a time, each with its versions' leaves; nothing for a snapshot without one.</summary>
+    public async IAsyncEnumerable<SnapshotBasePackage> BaseAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        string path = Path.Combine(Directory, "base.ndjson");
+        if (Manifest.Base is null || !File.Exists(path))
+        {
+            yield break;
+        }
+
+        using StreamReader packages = new(path);
+        using StreamReader leaves = new(Path.Combine(Directory, "base-leaves.ndjson"));
+        long sequence = 0;
+        while (await packages.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            using JsonDocument document = JsonDocument.Parse(line);
+            string id = document.RootElement.GetProperty("id").GetString()!;
+            List<SnapshotLeaf> withJson = [];
+            foreach (CatalogLeafRef leaf in Leaves(document.RootElement))
+            {
+                string json = await leaves.ReadLineAsync(cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidDataException("base-leaves.ndjson ends before " + id + "'s leaf " + leaf.Url + ".");
+                withJson.Add(new SnapshotLeaf(leaf, System.Text.Encoding.UTF8.GetBytes(json)));
+            }
+
+            yield return new SnapshotBasePackage(++sequence, id, withJson);
+        }
+
+        if (await leaves.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not null)
+        {
+            throw new InvalidDataException("base-leaves.ndjson holds more leaves than base.ndjson lists.");
+        }
+    }
 
     /// <summary>The retained commits, in catalog order, each with its leaves' JSON.</summary>
     public async IAsyncEnumerable<SnapshotCommit> CommitsAsync([EnumeratorCancellation] CancellationToken cancellationToken)
@@ -122,11 +157,13 @@ public sealed class SnapshotReader
     {
         using JsonDocument document = JsonDocument.Parse(line);
         JsonElement root = document.RootElement;
-        List<CatalogLeafRef> leaves = [.. root.GetProperty("leaves").EnumerateArray().Select(static leaf => new CatalogLeafRef(
+        return new CatalogCommit(root.GetProperty("commitId").GetString()!, root.GetProperty("commitTimeStamp").GetString()!, Leaves(root));
+    }
+
+    private static List<CatalogLeafRef> Leaves(JsonElement owner) =>
+        [.. owner.GetProperty("leaves").EnumerateArray().Select(static leaf => new CatalogLeafRef(
             leaf.GetProperty("url").GetString()!,
             string.Equals(leaf.GetProperty("type").GetString(), "PackageDelete", StringComparison.Ordinal),
             leaf.GetProperty("id").GetString()!,
             leaf.GetProperty("version").GetString()!))];
-        return new CatalogCommit(root.GetProperty("commitId").GetString()!, root.GetProperty("commitTimeStamp").GetString()!, leaves);
-    }
 }

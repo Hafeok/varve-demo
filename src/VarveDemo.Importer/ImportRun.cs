@@ -41,6 +41,15 @@ public sealed record ImportResult
     /// <summary>Commits sent and acknowledged.</summary>
     public required long Commits { get; init; }
 
+    /// <summary>Base commits acknowledged, one per package.</summary>
+    public required long BaseCommits { get; init; }
+
+    /// <summary>Quads the base inserted.</summary>
+    public required long BaseQuads { get; init; }
+
+    /// <summary>How long the base took.</summary>
+    public required TimeSpan BaseElapsed { get; init; }
+
     /// <summary>Quads the acknowledged updates inserted.</summary>
     public required long Quads { get; init; }
 
@@ -120,10 +129,16 @@ public sealed class ImportRun
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         SnapshotManifest manifest = snapshot.Manifest;
+        BaseCounts? baseCounts = manifest.Base;
         await _out.WriteLineAsync("snapshot: N = " + manifest.N.ToString(CultureInfo.InvariantCulture)
             + ", catalog time window " + SnapshotInputs.Format(manifest.From) + " to " + SnapshotInputs.Format(manifest.To)
             + ", " + manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture) + " catalog commits, "
             + manifest.Counts.Quads.ToString(CultureInfo.InvariantCulture) + " quads, sha256 " + manifest.Sha256).ConfigureAwait(false);
+        await _out.WriteLineAsync(baseCounts is { } described
+            ? "base: the catalog's state of the " + manifest.N.ToString(CultureInfo.InvariantCulture) + " packages as of " + SnapshotInputs.Format(manifest.From)
+                + ": " + described.Versions.ToString(CultureInfo.InvariantCulture) + " versions, " + described.Packages.ToString(CultureInfo.InvariantCulture) + " packages, "
+                + described.Quads.ToString(CultureInfo.InvariantCulture) + " quads. History before " + SnapshotInputs.Format(manifest.From) + " is not replayed; `varve-demo import --since <date>` replays it."
+            : "base: none; every catalog commit from " + SnapshotInputs.Format(manifest.From) + " is replayed").ConfigureAwait(false);
 
         await _server.WaitReadyAsync(_settings.ReadyTimeout, _out, cancellationToken).ConfigureAwait(false);
         long bound = await _server.MaxAsOfDistanceAsync(_importer, cancellationToken).ConfigureAwait(false);
@@ -133,54 +148,70 @@ public sealed class ImportRun
                 + "; it must be above 0 and below the server's maxAsOfDistance, " + bound.ToString(CultureInfo.InvariantCulture) + " (ADR 0004 point 6). Nothing was imported.");
         }
 
+        SparqlHttpClient admin = _server.Client(_checkpointer, TimeSpan.FromMinutes(10));
+        long head = await HeadAsync(admin, cancellationToken).ConfigureAwait(false);
+        if (head != 0)
+        {
+            throw new ImportRefusedException("The dataset " + _server.Dataset + " is at position " + head.ToString(CultureInfo.InvariantCulture)
+                + "; the import replays onto an empty dataset only. Start from an empty volume (docker compose down --volumes). Nothing was imported.");
+        }
+
         await _out.WriteLineAsync("server: " + _server.Server + ", dataset " + _server.Dataset + ", maxAsOfDistance " + bound.ToString(CultureInfo.InvariantCulture)
             + ", K = " + _settings.CheckpointEveryCommits.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-        await _out.WriteLineAsync("import: as " + _importer.ClientId + ", one SPARQL Update per catalog commit").ConfigureAwait(false);
 
-        SparqlHttpClient client = _server.Client(_importer, TimeSpan.FromMinutes(2));
-        CatalogUpdate mapper = new(snapshot.RemoteContexts());
+        SparqlHttpClient client = _server.Client(_importer, TimeSpan.FromMinutes(5));
+        long last = 0;
+
+        // The base: one Varve commit per package, as the importer.
+        long baseCommits = 0;
+        long baseQuads = 0;
+        Stopwatch baseClock = Stopwatch.StartNew();
+        if (baseCounts is not null)
+        {
+            await _out.WriteLineAsync("base: as " + _importer.ClientId + ", one SPARQL Update per package").ConfigureAwait(false);
+            TimeSpan nextBaseProgress = _settings.ProgressEvery;
+            await foreach (SnapshotBasePackage package in snapshot.BaseAsync(cancellationToken).ConfigureAwait(false))
+            {
+                CatalogUpdateText update = Mapped(() => CatalogUpdate.MapBase(package, manifest.From), "base of " + package.Id);
+                last = await SendAsync(client, update, "the base of " + package.Id + " (" + package.Sequence.ToString(CultureInfo.InvariantCulture) + " of the base)", last, cancellationToken).ConfigureAwait(false);
+                baseCommits++;
+                baseQuads += update.Quads;
+                if (baseClock.Elapsed >= nextBaseProgress)
+                {
+                    await Progress("base", "packages", baseCommits, baseCounts.Packages, baseQuads, baseClock.Elapsed, last).ConfigureAwait(false);
+                    nextBaseProgress = baseClock.Elapsed + _settings.ProgressEvery;
+                }
+            }
+
+            TimeSpan baseElapsed = TimeSpan.FromMilliseconds(Math.Round(baseClock.Elapsed.TotalMilliseconds));
+            await Progress("base", "packages", baseCommits, baseCounts.Packages, baseQuads, baseElapsed, last).ConfigureAwait(false);
+            if (baseCommits != baseCounts.Packages || baseQuads != baseCounts.Quads)
+            {
+                throw new ImportRefusedException("The base acknowledged " + baseCommits.ToString(CultureInfo.InvariantCulture) + " commits and " + baseQuads.ToString(CultureInfo.InvariantCulture)
+                    + " quads; the manifest states " + baseCounts.Packages.ToString(CultureInfo.InvariantCulture) + " and " + baseCounts.Quads.ToString(CultureInfo.InvariantCulture) + ".");
+            }
+        }
+
+        TimeSpan baseTook = TimeSpan.FromMilliseconds(Math.Round(baseClock.Elapsed.TotalMilliseconds));
+
+        // The window: one Varve commit per catalog commit, in catalog order.
+        await _out.WriteLineAsync("import: as " + _importer.ClientId + ", one SPARQL Update per catalog commit").ConfigureAwait(false);
         List<Acknowledged> acknowledged = new((int)Math.Min(manifest.Counts.CatalogCommitsRetained, int.MaxValue));
         long quads = 0;
-        long last = 0;
         Stopwatch clock = Stopwatch.StartNew();
         TimeSpan nextProgress = _settings.ProgressEvery;
 
         await foreach (SnapshotCommit commit in snapshot.CommitsAsync(cancellationToken).ConfigureAwait(false))
         {
-            CatalogUpdateText update;
-            try
-            {
-                update = mapper.Map(commit);
-            }
-            catch (LeafRefusedException error)
-            {
-                throw new ImportRefusedException("Catalog commit " + commit.Commit.CommitId + " (" + commit.Sequence.ToString(CultureInfo.InvariantCulture) + " of the snapshot): " + error.Message, error);
-            }
-
-            using HttpResponseMessage response = await client.UpdateAsync(update.Text, (long?)null, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-            {
-                string problem = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                throw new ImportRefusedException("Varve refused the update for catalog commit " + commit.Commit.CommitId + " ("
-                    + commit.Sequence.ToString(CultureInfo.InvariantCulture) + " of the snapshot, first leaf " + commit.Leaves[0].Ref.Url + "): "
-                    + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + " " + problem);
-            }
-
-            long position = SparqlHttpClient.PositionOf(response)
-                ?? throw new ImportRefusedException("The acknowledgement of catalog commit " + commit.Commit.CommitId + " carries no Varve-Position.");
-            if (position <= last)
-            {
-                throw new ImportRefusedException("The acknowledgement of catalog commit " + commit.Commit.CommitId + " is at position " + position.ToString(CultureInfo.InvariantCulture)
-                    + ", not above the previous one's, " + last.ToString(CultureInfo.InvariantCulture) + ".");
-            }
-
-            last = position;
+            CatalogUpdateText update = Mapped(() => CatalogUpdate.Map(commit), "catalog commit " + commit.Commit.CommitId + " (" + commit.Sequence.ToString(CultureInfo.InvariantCulture) + " of the snapshot)");
+            last = await SendAsync(client, update, "catalog commit " + commit.Commit.CommitId + " (" + commit.Sequence.ToString(CultureInfo.InvariantCulture)
+                + " of the snapshot, first leaf " + commit.Leaves[0].Ref.Url + ")", last, cancellationToken).ConfigureAwait(false);
             quads += update.Quads;
-            acknowledged.Add(new Acknowledged(commit.Sequence, commit.Commit.CommitId, position));
+            acknowledged.Add(new Acknowledged(commit.Sequence, commit.Commit.CommitId, last));
 
             if (clock.Elapsed >= nextProgress)
             {
-                await Progress(acknowledged.Count, manifest.Counts.CatalogCommitsRetained, quads, clock.Elapsed, position).ConfigureAwait(false);
+                await Progress("import", "catalog commits", acknowledged.Count, manifest.Counts.CatalogCommitsRetained, quads, clock.Elapsed, last).ConfigureAwait(false);
                 nextProgress = clock.Elapsed + _settings.ProgressEvery;
             }
         }
@@ -188,7 +219,7 @@ public sealed class ImportRun
         // The final line's rates are its own counts over its own printed time,
         // so a viewer (and S1's check, criterion 5) can redo the division.
         TimeSpan elapsed = TimeSpan.FromMilliseconds(Math.Round(clock.Elapsed.TotalMilliseconds));
-        await Progress(acknowledged.Count, manifest.Counts.CatalogCommitsRetained, quads, elapsed, last).ConfigureAwait(false);
+        await Progress("import", "catalog commits", acknowledged.Count, manifest.Counts.CatalogCommitsRetained, quads, elapsed, last).ConfigureAwait(false);
 
         if (acknowledged.Count != manifest.Counts.CatalogCommitsRetained || quads != manifest.Counts.Quads)
         {
@@ -199,7 +230,6 @@ public sealed class ImportRun
         // The final checkpoint (ADR 0004 point 6), as the dataset's admin.
         await _out.WriteLineAsync("checkpoint: as " + _checkpointer.ClientId + " (admin on " + _server.Dataset + "), POST /manage/datasets/" + _server.Dataset + "/checkpoints").ConfigureAwait(false);
         Stopwatch checkpointClock = Stopwatch.StartNew();
-        SparqlHttpClient admin = _server.Client(_checkpointer, TimeSpan.FromMinutes(10));
         using (HttpResponseMessage response = await admin.CheckpointAsync(null, cancellationToken).ConfigureAwait(false))
         {
             if (!response.IsSuccessStatusCode)
@@ -224,6 +254,9 @@ public sealed class ImportRun
             Commits = acknowledged.Count,
             Quads = quads,
             Elapsed = elapsed,
+            BaseCommits = baseCommits,
+            BaseQuads = baseQuads,
+            BaseElapsed = baseTook,
             Positions = (acknowledged[0].Position, last),
             CheckpointPosition = checkpoint,
             CheckpointElapsed = checkpointElapsed,
@@ -253,10 +286,54 @@ public sealed class ImportRun
         return newest;
     }
 
-    private Task Progress(long commits, long total, long quads, TimeSpan elapsed, long position)
+    private Task Progress(string phase, string unit, long commits, long total, long quads, TimeSpan elapsed, long position)
     {
         double seconds = Math.Max(elapsed.TotalSeconds, 1e-9);
         return _out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture,
-            $"import: {commits}/{total} catalog commits, {quads} quads, {elapsed.TotalSeconds:0.000} s, {commits / seconds:0.0} commits/s, {quads / seconds:0.0} quads/s, position {position}"));
+            $"{phase}: {commits}/{total} {unit}, {quads} quads, {elapsed.TotalSeconds:0.000} s, {commits / seconds:0.0} commits/s, {quads / seconds:0.0} quads/s, position {position}"));
+    }
+
+    private static CatalogUpdateText Mapped(Func<CatalogUpdateText> map, string what)
+    {
+        try
+        {
+            return map();
+        }
+        catch (LeafRefusedException error)
+        {
+            throw new ImportRefusedException(what + ": " + error.Message, error);
+        }
+    }
+
+    /// <summary>Sends one update; returns its acknowledged position, which must be above <paramref name="last"/>.</summary>
+    private static async Task<long> SendAsync(SparqlHttpClient client, CatalogUpdateText update, string what, long last, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await client.UpdateAsync(update.Text, (long?)null, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            string problem = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new ImportRefusedException("Varve refused the update for " + what + ": " + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + " " + problem);
+        }
+
+        long position = SparqlHttpClient.PositionOf(response)
+            ?? throw new ImportRefusedException("The acknowledgement of " + what + " carries no Varve-Position.");
+        return position > last
+            ? position
+            : throw new ImportRefusedException("The acknowledgement of " + what + " is at position " + position.ToString(CultureInfo.InvariantCulture)
+                + ", not above the previous one's, " + last.ToString(CultureInfo.InvariantCulture) + ".");
+    }
+
+    /// <summary>The dataset's head, from its status.</summary>
+    private static async Task<long> HeadAsync(SparqlHttpClient admin, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await admin.StatusAsync(cancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ImportRefusedException("The dataset's status was refused: " + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + " " + body);
+        }
+
+        using JsonDocument status = JsonDocument.Parse(body);
+        return status.RootElement.GetProperty("head").GetInt64();
     }
 }

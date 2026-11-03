@@ -21,7 +21,7 @@ internal static class Program
           varve-demo snapshot build   --inputs snapshot --out <empty dir> [--manifest <path to write>] [--check snapshot/manifest.json]
           varve-demo snapshot verify  --snapshot <dir> [--manifest <path>]
           varve-demo snapshot pack    --snapshot <dir> --out <file.tar.gz>
-          varve-demo import           --snapshot <dir or URL> --server <url> --issuer <url> [--issuer-address <url>] [--results <file>]
+          varve-demo import           --snapshot <dir or URL> | --since <date>   [--server <url> --issuer <url> --issuer-address <url>] [--results <file>]
           varve-demo count            --server <url> --issuer <url> [--issuer-address <url>]
           varve-demo deps             --lock <packages.lock.json> --server <url> --issuer <url> [--issuer-address <url>] [--results <file>]
 

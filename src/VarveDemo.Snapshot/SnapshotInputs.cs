@@ -20,7 +20,12 @@ namespace VarveDemo.Snapshot;
 /// <param name="Ids">The ids, in rank order.</param>
 /// <param name="From">The window's lower bound, inclusive, on catalog commit time.</param>
 /// <param name="To">The window's upper bound, exclusive.</param>
-public sealed record SnapshotInputs(int N, IReadOnlyList<string> Ids, DateTimeOffset From, DateTimeOffset To)
+/// <param name="Base">
+/// Whether the snapshot carries a base: for every version of the N packages,
+/// its latest leaf before <paramref name="From"/> (ADR 0008's amendment). True
+/// for the pinned snapshot; false for <c>import --since</c>'s deep replay.
+/// </param>
+public sealed record SnapshotInputs(int N, IReadOnlyList<string> Ids, DateTimeOffset From, DateTimeOffset To, bool Base = true)
 {
     /// <summary>Reads <c>inputs.json</c> and the id list it names, from <paramref name="directory"/>.</summary>
     public static SnapshotInputs Read(string directory)
@@ -44,7 +49,8 @@ public sealed record SnapshotInputs(int N, IReadOnlyList<string> Ids, DateTimeOf
             throw new InvalidDataException("The window's lower bound is not below its upper bound.");
         }
 
-        return new SnapshotInputs(n, ids, from, to);
+        bool withBase = !root.TryGetProperty("base", out JsonElement baseFlag) || baseFlag.GetBoolean();
+        return new SnapshotInputs(n, ids, from, to, withBase);
     }
 
     /// <summary>Parses an RFC 3339 timestamp in UTC.</summary>

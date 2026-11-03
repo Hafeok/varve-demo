@@ -17,7 +17,8 @@ internal static class ImportCommand
 {
     public static async Task<int> RunAsync(Arguments arguments, CancellationToken cancellationToken)
     {
-        string source = arguments.Required("snapshot");
+        string? since = arguments.Optional("since");
+        string? source = since is null ? arguments.Required("snapshot") : null;
         string cache = arguments.OrDefault("cache", ".data/snapshots");
         string? results = arguments.Optional("results");
         long k = arguments.Long("checkpoints-every-commits", Environment.GetEnvironmentVariable("VarveDemo__Checkpoints__EveryCommits") is { Length: > 0 } fromConfig
@@ -28,7 +29,9 @@ internal static class ImportCommand
         using ClientCredentials checkpointer = connection.Client("checkpointer");
         arguments.RefuseUnknown();
 
-        SnapshotReader snapshot = await PinnedSnapshot.OpenAsync(source, cache, Console.Out, cancellationToken).ConfigureAwait(false);
+        SnapshotReader snapshot = since is null
+            ? await PinnedSnapshot.OpenAsync(source!, cache, Console.Out, cancellationToken).ConfigureAwait(false)
+            : await DeepHistory.BuildAsync(SnapshotInputs.Timestamp(since), cache, Console.Out, cancellationToken).ConfigureAwait(false);
         ImportRun run = new(connection.Server, importer, checkpointer, new ImportSettings { CheckpointEveryCommits = k }, Console.Out);
         ImportResult result = await run.RunAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
@@ -36,9 +39,11 @@ internal static class ImportCommand
         string query = SparqlSelect.Load("catalog-commits.rq");
         SelectAnswer answer = await SparqlSelect.RunAsync(connection.Server.Client(importer, TimeSpan.FromMinutes(1)), query, cancellationToken).ConfigureAwait(false);
         long counted = long.Parse(answer.Solutions[0]["catalogCommits"] ?? "-1", CultureInfo.InvariantCulture);
+        long bases = long.Parse(answer.Solutions[0]["baseStates"] ?? "-1", CultureInfo.InvariantCulture);
+        long expectedBases = snapshot.Manifest.Base?.Packages ?? 0;
         await Console.Out.WriteLineAsync(query).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture,
-            $"answer: {counted} catalog commits at position {answer.Position}, in {answer.Elapsed.TotalMilliseconds:0} ms; the manifest predicts {snapshot.Manifest.Counts.CatalogCommitsRetained}")).ConfigureAwait(false);
+            $"answer: {bases} base states and {counted} catalog commits at position {answer.Position}, in {answer.Elapsed.TotalMilliseconds:0} ms; the manifest predicts {expectedBases} and {snapshot.Manifest.Counts.CatalogCommitsRetained}")).ConfigureAwait(false);
 
         if (results is not null)
         {
@@ -46,6 +51,9 @@ internal static class ImportCommand
                 .Fact("snapshotSha256", snapshot.Manifest.Sha256)
                 .Fact("tool", ToolVersion.Text)
                 .Fact("server", connection.Server.Server.ToString())
+                .Add(new Measurement("baseCommits", result.BaseCommits, "count", expectedBases, "equal"))
+                .Add(new Measurement("baseQuads", result.BaseQuads, "count", snapshot.Manifest.Base?.Quads ?? 0, "equal"))
+                .Add(new Measurement("baseSeconds", result.BaseElapsed.TotalSeconds, "s"))
                 .Add(new Measurement("catalogCommits", result.Commits, "count", snapshot.Manifest.Counts.CatalogCommitsRetained, "equal"))
                 .Add(new Measurement("quads", result.Quads, "count", snapshot.Manifest.Counts.Quads, "equal"))
                 .Add(new Measurement("importSeconds", result.Elapsed.TotalSeconds, "s"))
@@ -56,6 +64,7 @@ internal static class ImportCommand
                 .Add(new Measurement("checkpointPosition", result.CheckpointPosition, "position"))
                 .Add(new Measurement("checkpointSeconds", result.CheckpointElapsed.TotalSeconds, "s"))
                 .Add(new Measurement("maxAsOfDistance", result.MaxAsOfDistance, "count"))
+                .Add(new Measurement("answerBaseStates", bases, "count", expectedBases, "equal"))
                 .Add(new Measurement("answerCatalogCommits", counted, "count", snapshot.Manifest.Counts.CatalogCommitsRetained, "equal"))
                 .Add(new Measurement("answerPosition", answer.Position, "position"))
                 .Add(new Measurement("answerMilliseconds", answer.Elapsed.TotalMilliseconds, "ms"))
@@ -63,6 +72,6 @@ internal static class ImportCommand
             await PositionsFile.WriteAsync(results + ".positions.tsv", result, cancellationToken).ConfigureAwait(false);
         }
 
-        return counted == snapshot.Manifest.Counts.CatalogCommitsRetained ? 0 : 1;
+        return counted == snapshot.Manifest.Counts.CatalogCommitsRetained && bases == expectedBases ? 0 : 1;
     }
 }

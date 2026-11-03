@@ -59,13 +59,27 @@ public sealed class CatalogOracle
     {
         Dictionary<(string, string), OracleVersion> present = [];
         HashSet<string> versions = new(StringComparer.Ordinal);
-        using StreamReader leaves = new(Path.Combine(directory, "leaves.ndjson"));
-        foreach (string line in File.ReadLines(Path.Combine(directory, "commits.ndjson")))
+
+        // The base first, the catalog's state at the window's lower bound;
+        // then the window's commits, in order.
+        if (File.Exists(Path.Combine(directory, "base.ndjson")))
+        {
+            Replay(Path.Combine(directory, "base.ndjson"), Path.Combine(directory, "base-leaves.ndjson"), present, versions);
+        }
+
+        Replay(Path.Combine(directory, "commits.ndjson"), Path.Combine(directory, "leaves.ndjson"), present, versions);
+        return new CatalogOracle(present, [.. versions.Order(StringComparer.Ordinal)]);
+    }
+
+    private static void Replay(string entriesPath, string leavesPath, Dictionary<(string, string), OracleVersion> present, HashSet<string> versions)
+    {
+        using StreamReader leaves = new(leavesPath);
+        foreach (string line in File.ReadLines(entriesPath))
         {
             using JsonDocument commit = JsonDocument.Parse(line);
             foreach (JsonElement entry in commit.RootElement.GetProperty("leaves").EnumerateArray())
             {
-                string json = leaves.ReadLine() ?? throw new InvalidDataException("leaves.ndjson ends early.");
+                string json = leaves.ReadLine() ?? throw new InvalidDataException(leavesPath + " ends early.");
                 (string, string) key = (entry.GetProperty("id").GetString()!.ToLowerInvariant(), entry.GetProperty("version").GetString()!.ToLowerInvariant());
                 if (entry.GetProperty("type").GetString() == "PackageDelete")
                 {
@@ -92,8 +106,6 @@ public sealed class CatalogOracle
                 present[key] = new OracleVersion(key.Item1, key.Item2, leafVersion, NuGetVersion.Parse(leafVersion), listed, deprecated, reasons, alternate, advisories);
             }
         }
-
-        return new CatalogOracle(present, [.. versions.Order(StringComparer.Ordinal)]);
     }
 
     /// <summary>S2's answer for one locked package version, as one line in the tool's form.</summary>
@@ -105,7 +117,7 @@ public sealed class CatalogOracle
         if (!_present.TryGetValue((lowerId, lowerVersion), out OracleVersion? locked))
         {
             bool inTop = topIds.Any(top => string.Equals(top, id, StringComparison.OrdinalIgnoreCase));
-            return Line(lowerId, lowerVersion, "outside", inTop ? "no leaf in the snapshot's window" : "not among the top " + topIds.Count + " packages", "-", "-", "-");
+            return Line(lowerId, lowerVersion, "outside", inTop ? "version not in the catalog by the snapshot's upper bound" : "not among the top " + topIds.Count + " packages", "-", "-", "-");
         }
 
         bool flagged = locked.Deprecated || locked.Advisories.Count > 0;

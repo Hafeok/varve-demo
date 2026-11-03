@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
@@ -23,33 +22,40 @@ public static class CatalogSource
     public static readonly Uri Index = new("https://api.nuget.org/v3/catalog0/index.json");
 }
 
+/// <summary>One package's base: its versions' latest leaves before the window (ADR 0008's amendment).</summary>
+/// <param name="Id">The package id, lower case.</param>
+/// <param name="Leaves">One leaf per version present at the window's lower bound, by version, lower case and ordinal.</param>
+public sealed record BasePackage(string Id, IReadOnlyList<CatalogLeafRef> Leaves);
+
 /// <summary>What <see cref="SnapshotBuilder"/> found, before the quads are counted.</summary>
+/// <param name="Base">The base, one entry per package with a version present at the lower bound; empty without a base.</param>
+/// <param name="DeletedBeforeFrom">Versions whose latest leaf before the lower bound is a delete, so absent from the base.</param>
 /// <param name="Commits">The retained catalog commits, in catalog order.</param>
 /// <param name="Skipped">Catalog commits inside the window that touch no package of the subset.</param>
 /// <param name="Pages">The first and last catalog pages read.</param>
-/// <param name="RemoteContexts">The remote context documents the leaves name, as recorded.</param>
 /// <param name="InlineContexts">The inline contexts the leaves carry.</param>
 public sealed record SnapshotDraft(
+    IReadOnlyList<BasePackage> Base,
+    long DeletedBeforeFrom,
     IReadOnlyList<CatalogCommit> Commits,
     long Skipped,
     (int First, int Last) Pages,
-    IReadOnlyList<RemoteContext> RemoteContexts,
     IReadOnlyList<InlineContext> InlineContexts);
 
 /// <summary>
-/// Builds a snapshot (ADR 0008) as a pure function of the id list, the window
-/// and the tool version. The catalog is append-only and its leaves immutable,
-/// so the same inputs read the same bytes. The snapshot's files:
+/// Builds a snapshot (ADR 0008 and its amendment) as a pure function of the id
+/// list, the window and the tool version. The catalog is append-only and its
+/// leaves immutable, so the same inputs read the same bytes. The files:
 /// <list type="bullet">
 /// <item><c>ids.txt</c>: the id list;</item>
-/// <item><c>commits.ndjson</c>: one line per retained catalog commit, in catalog order;</item>
-/// <item><c>leaves.ndjson</c>: one line per leaf, in the same order, each the leaf's JSON as nuget.org serves it, minified;</item>
-/// <item><c>contexts/</c>: remote context documents the leaves name, if any.</item>
+/// <item><c>base.ndjson</c> and <c>base-leaves.ndjson</c>: per package, the latest leaf of each version before the lower bound;</item>
+/// <item><c>commits.ndjson</c> and <c>leaves.ndjson</c>: the retained catalog commits inside the window, in catalog order;</item>
 /// </list>
+/// every leaf as <see cref="LeafProjection"/> keeps it, one per line.
 /// </summary>
 public sealed class SnapshotBuilder
 {
-    private const int Parallelism = 32;
+    private const int Parallelism = 64;
 
     private readonly CatalogHttp _http;
     private readonly TextWriter _log;
@@ -73,17 +79,22 @@ public sealed class SnapshotBuilder
         Directory.CreateDirectory(output);
         HashSet<string> subset = new(inputs.Ids, StringComparer.OrdinalIgnoreCase);
 
-        // The pages that can hold a commit inside the window. A page's
-        // commitTimeStamp is its newest item's, so page i holds items after
-        // page i-1's timestamp, up to and including its own.
+        // A page's commitTimeStamp is its newest item's, so page i holds items
+        // after page i-1's timestamp, up to and including its own. The window
+        // needs the pages that can reach it; the base needs every page before.
         using JsonDocument index = JsonDocument.Parse(await _http.GetAsync(CatalogSource.Index, cancellationToken).ConfigureAwait(false));
         List<(int Number, Uri Url, DateTimeOffset Newest)> pages = [.. index.RootElement.GetProperty("items").EnumerateArray()
             .Select(static page => (Number: PageNumber(page.GetProperty("@id").GetString()!), Url: new Uri(page.GetProperty("@id").GetString()!), Newest: SnapshotInputs.Timestamp(page.GetProperty("commitTimeStamp").GetString())))
             .OrderBy(static page => page.Number)];
+        if (pages.Count == 0 || pages[^1].Newest < inputs.To)
+        {
+            throw new InvalidDataException("The catalog does not yet reach the window's upper bound " + SnapshotInputs.Format(inputs.To) + "; a snapshot's window must be closed.");
+        }
+
         List<(int Number, Uri Url, DateTimeOffset Newest)> selected = [];
         for (int i = 0; i < pages.Count; i++)
         {
-            bool reachesFrom = pages[i].Newest >= inputs.From;
+            bool reachesFrom = inputs.Base || pages[i].Newest >= inputs.From;
             bool startsBeforeTo = i == 0 || pages[i - 1].Newest < inputs.To;
             if (reachesFrom && startsBeforeTo)
             {
@@ -91,15 +102,11 @@ public sealed class SnapshotBuilder
             }
         }
 
-        if (selected.Count == 0 || pages[^1].Newest < inputs.To)
-        {
-            throw new InvalidDataException("The catalog does not yet reach the window's upper bound " + SnapshotInputs.Format(inputs.To) + "; a snapshot's window must be closed.");
-        }
-
         _log.WriteLine("catalog: " + selected.Count.ToString(CultureInfo.InvariantCulture) + " pages, " + selected[0].Number.ToString(CultureInfo.InvariantCulture) + " to " + selected[^1].Number.ToString(CultureInfo.InvariantCulture));
 
         ConcurrentBag<(string CommitId, string CommitTimeStamp, CatalogLeafRef Leaf)> items = [];
         ConcurrentDictionary<string, byte> windowCommits = new(StringComparer.Ordinal);
+        ConcurrentDictionary<(string Id, string Version), (DateTimeOffset At, CatalogLeafRef Leaf)> latest = new();
         int read = 0;
         await Parallel.ForEachAsync(selected, new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = cancellationToken }, async (page, token) =>
         {
@@ -108,13 +115,17 @@ public sealed class SnapshotBuilder
             {
                 string stamp = item.GetProperty("commitTimeStamp").GetString()!;
                 DateTimeOffset at = SnapshotInputs.Timestamp(stamp);
-                if (at < inputs.From || at >= inputs.To)
+                if (at >= inputs.To || (!inputs.Base && at < inputs.From))
                 {
                     continue;
                 }
 
                 string commitId = item.GetProperty("commitId").GetString()!;
-                windowCommits.TryAdd(commitId, 0);
+                if (at >= inputs.From)
+                {
+                    windowCommits.TryAdd(commitId, 0);
+                }
+
                 string id = item.GetProperty("nuget:id").GetString()!;
                 if (!subset.Contains(id))
                 {
@@ -128,15 +139,34 @@ public sealed class SnapshotBuilder
                     "nuget:PackageDelete" => true,
                     _ => throw new InvalidDataException("Catalog item of an unknown type " + type + " in " + page.Url),
                 };
-                items.Add((commitId, stamp, new CatalogLeafRef(item.GetProperty("@id").GetString()!, isDelete, id, item.GetProperty("nuget:version").GetString()!)));
+                CatalogLeafRef leaf = new(item.GetProperty("@id").GetString()!, isDelete, id, item.GetProperty("nuget:version").GetString()!);
+                if (at >= inputs.From)
+                {
+                    items.Add((commitId, stamp, leaf));
+                }
+                else
+                {
+                    // The latest leaf before the lower bound; ties by URL, so the choice is a function of the catalog.
+                    latest.AddOrUpdate(
+                        (id.ToLowerInvariant(), leaf.Version.ToLowerInvariant()),
+                        (at, leaf),
+                        (_, held) => at > held.At || (at == held.At && string.CompareOrdinal(leaf.Url, held.Leaf.Url) > 0) ? (at, leaf) : held);
+                }
             }
 
             int done = Interlocked.Increment(ref read);
-            if (done % 200 == 0)
+            if (done % 1000 == 0)
             {
                 _log.WriteLine("catalog: " + done.ToString(CultureInfo.InvariantCulture) + " pages read");
             }
         }).ConfigureAwait(false);
+
+        List<BasePackage> basePackages = [.. latest
+            .Where(static pair => !pair.Value.Leaf.IsDelete)
+            .GroupBy(static pair => pair.Key.Id, StringComparer.Ordinal)
+            .OrderBy(static group => group.Key, StringComparer.Ordinal)
+            .Select(static group => new BasePackage(group.Key, [.. group.OrderBy(static pair => pair.Key.Version, StringComparer.Ordinal).Select(static pair => pair.Value.Leaf)]))];
+        long deletedBeforeFrom = latest.Count(static pair => pair.Value.Leaf.IsDelete);
 
         List<CatalogCommit> commits = [.. items
             .GroupBy(static item => item.CommitId, StringComparer.Ordinal)
@@ -160,15 +190,17 @@ public sealed class SnapshotBuilder
             throw new InvalidDataException("No catalog commit inside the window touches the subset.");
         }
 
-        _log.WriteLine("catalog: " + commits.Count.ToString(CultureInfo.InvariantCulture) + " commits retained, " + commits.Sum(static c => c.Leaves.Count).ToString(CultureInfo.InvariantCulture) + " leaves to fetch");
+        CatalogLeafRef[] baseLeaves = [.. basePackages.SelectMany(static package => package.Leaves)];
+        CatalogLeafRef[] windowLeaves = [.. commits.SelectMany(static commit => commit.Leaves)];
+        _log.WriteLine("catalog: base " + basePackages.Count.ToString(CultureInfo.InvariantCulture) + " packages, " + baseLeaves.Length.ToString(CultureInfo.InvariantCulture)
+            + " versions; window " + commits.Count.ToString(CultureInfo.InvariantCulture) + " commits, " + windowLeaves.Length.ToString(CultureInfo.InvariantCulture) + " leaves");
 
-        // Every leaf, fetched once; minified to one line, the JSON unchanged.
-        CatalogLeafRef[] allLeaves = [.. commits.SelectMany(static commit => commit.Leaves)];
+        // Every leaf, fetched once, kept as its projection.
         ConcurrentDictionary<string, byte[]> bodies = new(StringComparer.Ordinal);
-        ConcurrentDictionary<string, string> remote = new(StringComparer.Ordinal);
         ConcurrentDictionary<string, long> inline = new(StringComparer.Ordinal);
         int fetched = 0;
-        await Parallel.ForEachAsync(allLeaves.DistinctBy(static leaf => leaf.Url, StringComparer.Ordinal), new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = cancellationToken }, async (leaf, token) =>
+        IEnumerable<CatalogLeafRef> toFetch = baseLeaves.Concat(windowLeaves).Where(static leaf => !leaf.IsDelete).DistinctBy(static leaf => leaf.Url, StringComparer.Ordinal);
+        await Parallel.ForEachAsync(toFetch, new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = cancellationToken }, async (leaf, token) =>
         {
             byte[] body = await _http.GetAsync(new Uri(leaf.Url), token).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(body);
@@ -178,50 +210,36 @@ public sealed class SnapshotBuilder
                 throw new InvalidDataException("The leaf at " + leaf.Url + " names itself " + at + ".");
             }
 
-            if (document.RootElement.TryGetProperty("@context", out JsonElement context))
-            {
-                foreach (JsonElement part in context.ValueKind == JsonValueKind.Array ? [.. context.EnumerateArray()] : new[] { context })
-                {
-                    if (part.ValueKind == JsonValueKind.String)
-                    {
-                        remote.TryAdd(part.GetString()!, string.Empty);
-                    }
-                    else
-                    {
-                        inline.AddOrUpdate(Sha256Text.Of(Minify(part)), 1, static (_, count) => count + 1);
-                    }
-                }
-            }
-
-            bodies[leaf.Url] = Minify(document.RootElement);
+            byte[] projected = LeafProjection.Project(document.RootElement, leaf.Url);
+            inline.AddOrUpdate(Sha256Text.Of(Minify(document.RootElement.GetProperty("@context"))), 1, static (_, count) => count + 1);
+            bodies[leaf.Url] = projected;
             int done = Interlocked.Increment(ref fetched);
-            if (done % 2000 == 0)
+            if (done % 20000 == 0)
             {
                 _log.WriteLine("leaves: " + done.ToString(CultureInfo.InvariantCulture) + " fetched");
             }
         }).ConfigureAwait(false);
 
-        // Remote contexts, recorded so the importer never fetches one (ADR 0006).
-        List<RemoteContext> remoteContexts = [];
-        foreach (string iri in remote.Keys.Order(StringComparer.Ordinal))
-        {
-            byte[] document = await _http.GetAsync(new Uri(iri), cancellationToken).ConfigureAwait(false);
-            string hash = Sha256Text.Of(document);
-            string path = "contexts/" + hash + ".jsonld";
-            Directory.CreateDirectory(Path.Combine(output, "contexts"));
-            await File.WriteAllBytesAsync(Path.Combine(output, path), document, cancellationToken).ConfigureAwait(false);
-            remoteContexts.Add(new RemoteContext(iri, path, hash));
-        }
+        // A delete leaf carries nothing the import reads beyond what its page
+        // states; it is kept as a one-member object naming it.
+        byte[] Body(CatalogLeafRef leaf) => leaf.IsDelete ? DeleteLine(leaf.Url) : bodies[leaf.Url];
 
         await File.WriteAllTextAsync(Path.Combine(output, "ids.txt"), string.Join('\n', inputs.Ids) + "\n", cancellationToken).ConfigureAwait(false);
+        if (inputs.Base)
+        {
+            await WriteLinesAsync(Path.Combine(output, "base.ndjson"), basePackages.Select(BaseLine), cancellationToken).ConfigureAwait(false);
+            await WriteLinesAsync(Path.Combine(output, "base-leaves.ndjson"), baseLeaves.Select(Body), cancellationToken).ConfigureAwait(false);
+        }
+
         await WriteLinesAsync(Path.Combine(output, "commits.ndjson"), commits.Select(CommitLine), cancellationToken).ConfigureAwait(false);
-        await WriteLinesAsync(Path.Combine(output, "leaves.ndjson"), allLeaves.Select(leaf => bodies[leaf.Url]), cancellationToken).ConfigureAwait(false);
+        await WriteLinesAsync(Path.Combine(output, "leaves.ndjson"), windowLeaves.Select(Body), cancellationToken).ConfigureAwait(false);
 
         return new SnapshotDraft(
+            basePackages,
+            deletedBeforeFrom,
             commits,
             windowCommits.Count - commits.Count,
             (selected[0].Number, selected[^1].Number),
-            remoteContexts,
             [.. inline.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => new InlineContext(pair.Key, pair.Value))]);
     }
 
@@ -247,18 +265,52 @@ public sealed class SnapshotBuilder
             json.WriteStartObject();
             json.WriteString("commitId", commit.CommitId);
             json.WriteString("commitTimeStamp", commit.CommitTimeStamp);
-            json.WriteStartArray("leaves");
-            foreach (CatalogLeafRef leaf in commit.Leaves)
-            {
-                json.WriteStartObject();
-                json.WriteString("type", leaf.IsDelete ? "PackageDelete" : "PackageDetails");
-                json.WriteString("id", leaf.Id);
-                json.WriteString("version", leaf.Version);
-                json.WriteString("url", leaf.Url);
-                json.WriteEndObject();
-            }
+            WriteLeaves(json, commit.Leaves);
+            json.WriteEndObject();
+        }
 
-            json.WriteEndArray();
+        return output.ToArray();
+    }
+
+    /// <summary>One line of <c>base.ndjson</c>.</summary>
+    public static byte[] BaseLine(BasePackage package)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        using MemoryStream output = new();
+        using (Utf8JsonWriter json = new(output, MinifiedOptions()))
+        {
+            json.WriteStartObject();
+            json.WriteString("id", package.Id);
+            WriteLeaves(json, package.Leaves);
+            json.WriteEndObject();
+        }
+
+        return output.ToArray();
+    }
+
+    private static void WriteLeaves(Utf8JsonWriter json, IReadOnlyList<CatalogLeafRef> leaves)
+    {
+        json.WriteStartArray("leaves");
+        foreach (CatalogLeafRef leaf in leaves)
+        {
+            json.WriteStartObject();
+            json.WriteString("type", leaf.IsDelete ? "PackageDelete" : "PackageDetails");
+            json.WriteString("id", leaf.Id);
+            json.WriteString("version", leaf.Version);
+            json.WriteString("url", leaf.Url);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static byte[] DeleteLine(string url)
+    {
+        using MemoryStream output = new();
+        using (Utf8JsonWriter json = new(output, MinifiedOptions()))
+        {
+            json.WriteStartObject();
+            json.WriteString("@id", url);
             json.WriteEndObject();
         }
 
@@ -285,7 +337,4 @@ public sealed class SnapshotBuilder
             }
         }
     }
-
-    /// <summary>The UTF-8 text of a line, for messages.</summary>
-    internal static string Text(byte[] line) => Encoding.UTF8.GetString(line);
 }

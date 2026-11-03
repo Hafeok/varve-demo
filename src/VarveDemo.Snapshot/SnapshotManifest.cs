@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -13,7 +14,26 @@ using System.Threading.Tasks;
 
 namespace VarveDemo.Snapshot;
 
-/// <summary>The counts a snapshot's manifest states (ADR 0008).</summary>
+/// <summary>The base's counts (ADR 0008's amendment): the catalog's state of the N packages at the window's lower bound.</summary>
+public sealed record BaseCounts
+{
+    /// <summary>Packages with at least one version present: one Varve commit each.</summary>
+    public required long Packages { get; init; }
+
+    /// <summary>Versions present, each its latest leaf before the lower bound.</summary>
+    public required long Versions { get; init; }
+
+    /// <summary>Versions whose latest leaf before the lower bound is a delete, so absent.</summary>
+    public required long DeletedBefore { get; init; }
+
+    /// <summary>Quads the importer sends for the base.</summary>
+    public required long Quads { get; init; }
+
+    /// <summary>The hash over the base's files, as <see cref="SnapshotManifest.HashList"/> takes it.</summary>
+    public required string Sha256 { get; init; }
+}
+
+/// <summary>The window's counts a snapshot's manifest states (ADR 0008).</summary>
 public sealed record SnapshotCounts
 {
     /// <summary>Catalog commits inside the window that touch the subset: one Varve commit each.</summary>
@@ -40,15 +60,9 @@ public sealed record SnapshotCounts
     /// <summary>Package versions whose graph exists after the last commit: touched, and not deleted last.</summary>
     public required long VersionsPresent { get; init; }
 
-    /// <summary>Quads the importer sends, inserted, over every retained commit: the rate's numerator (S1 criterion 5).</summary>
+    /// <summary>Quads the importer sends, inserted, over the window's retained commits: the window's rate's numerator (S1 criterion 5).</summary>
     public required long Quads { get; init; }
 }
-
-/// <summary>A remote context document a leaf names, as recorded in the snapshot (ADR 0006).</summary>
-/// <param name="Iri">The IRI the leaf names.</param>
-/// <param name="Path">Its file in the snapshot.</param>
-/// <param name="Sha256">The hash of its bytes.</param>
-public sealed record RemoteContext(string Iri, string Path, string Sha256);
 
 /// <summary>An inline context, by the hash of its minified JSON, and how many leaves carry it.</summary>
 /// <param name="Sha256">The hash of the context object as the snapshot writes it.</param>
@@ -70,7 +84,10 @@ public sealed record SnapshotFile(string Path, long Bytes, string Sha256);
 public sealed record SnapshotManifest
 {
     /// <summary>The version of this manifest's form.</summary>
-    public const int CurrentFormat = 1;
+    public const int CurrentFormat = 2;
+
+    /// <summary>The files that hold the base.</summary>
+    public static readonly ImmutableArray<string> BaseFiles = ["base.ndjson", "base-leaves.ndjson"];
 
     /// <summary>The form of the manifest.</summary>
     public int Format { get; init; } = CurrentFormat;
@@ -96,11 +113,11 @@ public sealed record SnapshotManifest
     /// <summary>The first and last retained catalog commits, by commit id.</summary>
     public required (string First, string Last) Commits { get; init; }
 
-    /// <summary>The counts.</summary>
+    /// <summary>The window's counts.</summary>
     public required SnapshotCounts Counts { get; init; }
 
-    /// <summary>Remote context documents the leaves name.</summary>
-    public required IReadOnlyList<RemoteContext> RemoteContexts { get; init; }
+    /// <summary>The base's counts, or null for a snapshot without a base (<c>import --since</c>).</summary>
+    public required BaseCounts? Base { get; init; }
 
     /// <summary>Inline contexts the leaves carry.</summary>
     public required IReadOnlyList<InlineContext> InlineContexts { get; init; }
@@ -175,18 +192,20 @@ public sealed record SnapshotManifest
             json.WriteNumber("versionsPresent", Counts.VersionsPresent);
             json.WriteNumber("quads", Counts.Quads);
             json.WriteEndObject();
-            json.WriteStartObject("contexts");
-            json.WriteStartArray("remote");
-            foreach (RemoteContext context in RemoteContexts)
+            if (Base is { } baseCounts)
             {
-                json.WriteStartObject();
-                json.WriteString("iri", context.Iri);
-                json.WriteString("path", context.Path);
-                json.WriteString("sha256", context.Sha256);
+                json.WriteStartObject("base");
+                json.WriteString("asOf", SnapshotInputs.Format(From));
+                json.WriteNumber("packages", baseCounts.Packages);
+                json.WriteNumber("versions", baseCounts.Versions);
+                json.WriteNumber("deletedBefore", baseCounts.DeletedBefore);
+                json.WriteNumber("quads", baseCounts.Quads);
+                json.WriteString("sha256", baseCounts.Sha256);
                 json.WriteEndObject();
             }
 
-            json.WriteEndArray();
+            // Every context is inline; a leaf with a remote one fails the build (ADR 0006).
+            json.WriteStartObject("contexts");
             json.WriteStartArray("inline");
             foreach (InlineContext context in InlineContexts)
             {
@@ -253,7 +272,16 @@ public sealed record SnapshotManifest
                 VersionsPresent = counts.GetProperty("versionsPresent").GetInt64(),
                 Quads = counts.GetProperty("quads").GetInt64(),
             },
-            RemoteContexts = [.. contexts.GetProperty("remote").EnumerateArray().Select(static c => new RemoteContext(Text(c, "iri"), Text(c, "path"), Text(c, "sha256")))],
+            Base = root.TryGetProperty("base", out JsonElement b)
+                ? new BaseCounts
+                {
+                    Packages = b.GetProperty("packages").GetInt64(),
+                    Versions = b.GetProperty("versions").GetInt64(),
+                    DeletedBefore = b.GetProperty("deletedBefore").GetInt64(),
+                    Quads = b.GetProperty("quads").GetInt64(),
+                    Sha256 = Text(b, "sha256"),
+                }
+                : null,
             InlineContexts = [.. contexts.GetProperty("inline").EnumerateArray().Select(static c => new InlineContext(Text(c, "sha256"), c.GetProperty("leaves").GetInt64()))],
             Files = [.. root.GetProperty("files").EnumerateArray().Select(static f => new SnapshotFile(Text(f, "path"), f.GetProperty("bytes").GetInt64(), Text(f, "sha256")))],
         };

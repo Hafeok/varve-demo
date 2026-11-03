@@ -24,8 +24,21 @@ public sealed class CatalogHttp : IDisposable
     /// <summary>A client with automatic decompression and a generous timeout.</summary>
     public CatalogHttp()
     {
-        HttpClientHandler handler = new() { AutomaticDecompression = DecompressionMethods.All };
-        _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(100) };
+        // The base reads every page and about half a million leaves: many
+        // connections, HTTP/2 where the server offers it.
+        SocketsHttpHandler handler = new()
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            MaxConnectionsPerServer = 64,
+            EnableMultipleHttp2Connections = true,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        };
+        _http = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(100),
+            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+        };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("varve-demo-snapshot/1");
     }
 

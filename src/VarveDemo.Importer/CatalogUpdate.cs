@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -21,6 +20,15 @@ public static class DemoNames
 
     /// <summary>The demo's namespace for derived terms (ADR 0010).</summary>
     public const string Term = "urn:varve-demo:term:";
+
+    /// <summary>A package's base state in the catalog log (ADR 0008's amendment).</summary>
+    public static string BaseState(string packageId) => "urn:varve-demo:base:" + Encode(packageId.ToLowerInvariant());
+
+    /// <summary>The catalog time a base state holds at: the window's lower bound.</summary>
+    public const string BaseAsOf = Term + "baseAsOf";
+
+    /// <summary>The package a base state is of.</summary>
+    public const string BasePackage = Term + "basePackage";
 
     /// <summary>The version key's predicate (ADR 0010 point 5).</summary>
     public const string VersionKey = Term + "versionKey";
@@ -97,21 +105,55 @@ public sealed class LeafRefusedException : Exception
 /// details leaf, its quads inserted, as <c>Varve.JsonLd</c> produces them with
 /// the version key beside them; then the commit's catalog-log assertion.
 /// </summary>
-public sealed class CatalogUpdate
+public static class CatalogUpdate
 {
-    private readonly IReadOnlyDictionary<string, byte[]> _contexts;
+    /// <summary>The mapping's version, part of the tool version a snapshot names.</summary>
+    public const string MappingVersion = "2";
 
-    /// <summary>A mapper whose document loader answers only from <paramref name="contexts"/> (ADR 0006 point 2).</summary>
-    public CatalogUpdate(IReadOnlyDictionary<string, byte[]> contexts)
+    /// <summary>
+    /// The base state of one package (ADR 0008's amendment): one graph per
+    /// version present at the window's lower bound, and in the catalog log a
+    /// node saying this is the package's state as of that bound.
+    /// </summary>
+    public static CatalogUpdateText MapBase(SnapshotBasePackage package, DateTimeOffset asOf)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        ArgumentNullException.ThrowIfNull(package);
+        StringBuilder update = new(64 * 1024);
+        long quads = 0;
+        int leafNumber = 0;
+        foreach (SnapshotLeaf leaf in package.Leaves)
+        {
+            string graph = DemoNames.VersionGraph(leaf.Ref.Id, leaf.Ref.Version);
+            update.Append("INSERT DATA { GRAPH ");
+            NTriplesTerms.Iri(update, graph);
+            update.Append(" {\n");
+            quads += Leaf(update, leaf, "l" + leafNumber.ToString(CultureInfo.InvariantCulture) + "_");
+            update.Append("} } ;\n");
+            leafNumber++;
+        }
+
+        update.Append("INSERT DATA { GRAPH ");
+        NTriplesTerms.Iri(update, DemoNames.CatalogLog);
+        update.Append(" {\n");
+        NTriplesTerms.Iri(update, DemoNames.BaseState(package.Id));
+        update.Append(' ');
+        NTriplesTerms.Iri(update, DemoNames.BasePackage);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, package.Id);
+        update.Append(" ;\n  ");
+        NTriplesTerms.Iri(update, DemoNames.BaseAsOf);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, SnapshotInputs.Format(asOf));
+        update.Append("^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n} }\n");
+        quads += 2;
+        return new CatalogUpdateText(update.ToString(), quads, package.Leaves.Count);
     }
 
-    /// <summary>The mapping's version, part of the tool version a snapshot names.</summary>
-    public const string MappingVersion = "1";
+    /// <summary>Counts the quads <see cref="MapBase"/> would insert.</summary>
+    public static long CountBaseQuads(SnapshotBasePackage package, DateTimeOffset asOf) => MapBase(package, asOf).Quads;
 
     /// <summary>The update for <paramref name="commit"/>.</summary>
-    public CatalogUpdateText Map(SnapshotCommit commit)
+    public static CatalogUpdateText Map(SnapshotCommit commit)
     {
         ArgumentNullException.ThrowIfNull(commit);
         StringBuilder update = new(16 * 1024);
@@ -157,22 +199,18 @@ public sealed class CatalogUpdate
     }
 
     /// <summary>Counts the quads <see cref="Map"/> would insert, without building the text.</summary>
-    public long CountQuads(SnapshotCommit commit) => Map(commit).Quads;
+    public static long CountQuads(SnapshotCommit commit) => Map(commit).Quads;
 
-    private long Leaf(StringBuilder update, SnapshotLeaf leaf, string blankPrefix)
+    private static long Leaf(StringBuilder update, SnapshotLeaf leaf, string blankPrefix)
     {
-        IReadOnlyDictionary<string, byte[]> contexts = _contexts;
+        // Every leaf carries its context inline. The loader refuses every
+        // remote one, as Varve.JsonLd's default does, so a leaf naming one
+        // fails the import instead of being fetched (ADR 0006's amendment).
         JsonLdOptions options = new()
         {
             BaseIri = Encoding.UTF8.GetBytes(leaf.Ref.Url),
-            DocumentLoader = (ReadOnlySpan<byte> iri, out ReadOnlyMemory<byte> document) =>
+            DocumentLoader = static (ReadOnlySpan<byte> iri, out ReadOnlyMemory<byte> document) =>
             {
-                if (contexts.TryGetValue(Encoding.UTF8.GetString(iri), out byte[]? recorded))
-                {
-                    document = recorded;
-                    return true;
-                }
-
                 document = default;
                 return false;
             },

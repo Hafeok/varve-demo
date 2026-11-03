@@ -51,18 +51,53 @@ public sealed partial class StepChecks
         ProcessResult up = await Stack.ComposeAsync("up --detach", TimeSpan.FromMinutes(2));
         Assert.True(up.ExitCode == 0, "docker compose up failed:\n" + up.Error);
         long rssStart = await Stack.ServerResidentKiBAsync();
-        ProcessResult wait = await Stack.RunAsync("docker", "wait varve-demo-importer-1", s_s1Target + TimeSpan.FromMinutes(10));
+
+        // Resident memory at the end of the import, before the final
+        // checkpoint: sampled when the importer says it is taking it.
+        long rssBeforeCheckpoint = -1;
+        Task<ProcessResult> waiting = Stack.RunAsync("docker", "wait varve-demo-importer-1", s_s1Target + TimeSpan.FromMinutes(20));
+        while (!waiting.IsCompleted)
+        {
+            if (rssBeforeCheckpoint < 0)
+            {
+                ProcessResult tail = await Stack.RunAsync("docker", "logs --tail 3 varve-demo-importer-1", TimeSpan.FromSeconds(30));
+                if ((tail.Output + tail.Error).Contains("checkpoint: as", StringComparison.Ordinal))
+                {
+                    rssBeforeCheckpoint = await Stack.ServerResidentKiBAsync();
+                }
+            }
+
+            await Task.WhenAny(waiting, Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken));
+        }
+
+        ProcessResult wait = await waiting;
         TimeSpan toAnswer = clock.Elapsed;
-        long rssEnd = await Stack.ServerResidentKiBAsync();
+        long rssAfterCheckpoint = await Stack.ServerResidentKiBAsync();
         ProcessResult logs = await Stack.RunAsync("docker", "logs varve-demo-importer-1", TimeSpan.FromMinutes(1));
         string printed = logs.Output + logs.Error;
         Assert.True(wait.Output.Trim() == "0", "The importer exited with " + wait.Output.Trim() + ":\n" + Stack.Indent(printed));
 
         report.Add(new Measurement("composeUpToAnswerSeconds", toAnswer.TotalSeconds, "s", s_s1Target.TotalSeconds, "max"))
             .Add(new Measurement("serverResidentKiBAtStart", rssStart, "KiB"))
-            .Add(new Measurement("serverResidentKiBAtEnd", rssEnd, "KiB"));
+            .Add(new Measurement("serverResidentKiBBeforeFinalCheckpoint", rssBeforeCheckpoint, "KiB"))
+            .Add(new Measurement("serverResidentKiBAfterFinalCheckpoint", rssAfterCheckpoint, "KiB"));
 
-        // Criteria 4 and 5: the full replay, its rate from its own clock and the manifest's counts.
+        // The base (ADR 0008's amendment): one commit per package, its rate from its own clock.
+        Match baseLine = BaseProgress(printed);
+        long baseCommits = long.Parse(baseLine.Groups["done"].Value, CultureInfo.InvariantCulture);
+        long baseQuads = long.Parse(baseLine.Groups["quads"].Value, CultureInfo.InvariantCulture);
+        double baseSeconds = double.Parse(baseLine.Groups["seconds"].Value, CultureInfo.InvariantCulture);
+        Assert.Equal(manifest.Base!.Packages, baseCommits);
+        Assert.Equal(manifest.Base.Quads, baseQuads);
+        AssertRate(baseCommits, baseSeconds, double.Parse(baseLine.Groups["cps"].Value, CultureInfo.InvariantCulture));
+        AssertRate(baseQuads, baseSeconds, double.Parse(baseLine.Groups["qps"].Value, CultureInfo.InvariantCulture));
+        Assert.Contains("History before " + SnapshotInputs.Format(manifest.From) + " is not replayed", printed, StringComparison.Ordinal);
+        report.Add(new Measurement("baseSeconds", baseSeconds, "s"))
+            .Add(new Measurement("baseCommits", baseCommits, "count", manifest.Base.Packages, "equal"))
+            .Add(new Measurement("baseVersions", manifest.Base.Versions, "count"))
+            .Add(new Measurement("baseQuads", baseQuads, "count", manifest.Base.Quads, "equal"));
+
+        // Criteria 4 and 5: the full replay of the window, its rate from its own clock and the manifest's counts.
         (long commits, long quads, double seconds, double commitsPerSecond, double quadsPerSecond) = FinalProgress(printed);
         Assert.Equal(manifest.Counts.CatalogCommitsRetained, commits);
         Assert.Equal(manifest.Counts.Quads, quads);
@@ -77,7 +112,7 @@ public sealed partial class StepChecks
         Assert.Contains("catalog time window " + SnapshotInputs.Format(manifest.From) + " to " + SnapshotInputs.Format(manifest.To), printed, StringComparison.Ordinal);
 
         // The first answer: the count the manifest predicts.
-        Assert.Contains("answer: " + manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture) + " catalog commits", printed, StringComparison.Ordinal);
+        Assert.Contains("answer: " + manifest.Base.Packages.ToString(CultureInfo.InvariantCulture) + " base states and " + manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture) + " catalog commits", printed, StringComparison.Ordinal);
 
         using HttpClient http = new();
         using ClientCredentials viewer = Stack.Client(http, "viewer");
@@ -92,8 +127,9 @@ public sealed partial class StepChecks
         DemoServer server = new(http, Stack.Server, "nuget");
         SelectAnswer count = await SparqlSelect.RunAsync(server.Client(viewer, TimeSpan.FromMinutes(1)), SparqlSelect.Load("catalog-commits.rq"), TestContext.Current.CancellationToken);
         Assert.Equal(manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture), count.Solutions[0]["catalogCommits"]);
+        Assert.Equal(manifest.Base.Packages.ToString(CultureInfo.InvariantCulture), count.Solutions[0]["baseStates"]);
         IReadOnlyList<(long Position, string Agent)> feed = await Stack.FeedAgentsAsync(http, viewer, count.Position);
-        Assert.Equal(manifest.Counts.CatalogCommitsRetained, feed.Count);
+        Assert.Equal(manifest.Base.Packages + manifest.Counts.CatalogCommitsRetained, feed.Count);
         Assert.All(feed, static commit => Assert.Equal("<" + Stack.Issuer + "#varve-demo-importer>", commit.Agent));
         Assert.True(feed.Zip(feed.Skip(1)).All(static pair => pair.First.Position < pair.Second.Position), "The feed's positions are not strictly increasing.");
         string positions = Path.Combine(Stack.ResultsDirectory, "s1-compose-import.json.positions.tsv");
@@ -101,11 +137,19 @@ public sealed partial class StepChecks
         {
             long[] acknowledged = [.. File.ReadLines(positions).Skip(1).Select(static line => long.Parse(line.Split('\t')[2], CultureInfo.InvariantCulture))];
             Assert.Equal(manifest.Counts.CatalogCommitsRetained, acknowledged.Length);
-            Assert.Equal(feed.Select(static c => c.Position), acknowledged);
+            Assert.Equal(feed.Skip((int)manifest.Base.Packages).Select(static c => c.Position), acknowledged);
         }
 
         report.Add(new Measurement("head", count.Position, "position"))
-            .Add(new Measurement("feedCommitsWithImporterAgent", feed.Count, "count", manifest.Counts.CatalogCommitsRetained, "equal"));
+            .Add(new Measurement("feedCommitsWithImporterAgent", feed.Count, "count", manifest.Base.Packages + manifest.Counts.CatalogCommitsRetained, "equal"));
+
+        // Resident memory after a restart of the server, on the same volume (ruling 3 of the review).
+        ProcessResult restart = await Stack.ComposeAsync("restart varve", TimeSpan.FromMinutes(2));
+        Assert.True(restart.ExitCode == 0, restart.Error);
+        await server.WaitReadyAsync(TimeSpan.FromMinutes(2), TextWriter.Null, TestContext.Current.CancellationToken);
+        SelectAnswer afterRestart = await SparqlSelect.RunAsync(server.Client(viewer, TimeSpan.FromMinutes(1)), SparqlSelect.Load("catalog-commits.rq"), TestContext.Current.CancellationToken);
+        Assert.Equal(count.Position, afterRestart.Position);
+        report.Add(new Measurement("serverResidentKiBAfterRestart", await Stack.ServerResidentKiBAsync(), "KiB"));
 
         // The same flow through the installed tool (ADR 0012 point 4): a fresh
         // stack without the importer, then `varve-demo import` from this machine.
@@ -118,6 +162,8 @@ public sealed partial class StepChecks
         Assert.True(tool.ExitCode == 0, "varve-demo import exited with " + tool.ExitCode + ":\n" + Stack.Indent(toolPrinted));
         (long toolCommits, long toolQuads, double toolSeconds, double toolCommitsPerSecond, double toolQuadsPerSecond) = FinalProgress(toolPrinted);
         Assert.Equal(manifest.Counts.CatalogCommitsRetained, toolCommits);
+        Match toolBase = BaseProgress(toolPrinted);
+        report.Add(new Measurement("toolBaseSeconds", double.Parse(toolBase.Groups["seconds"].Value, CultureInfo.InvariantCulture), "s"));
         Assert.Equal(manifest.Counts.Quads, toolQuads);
         AssertRate(toolCommits, toolSeconds, toolCommitsPerSecond);
         AssertRate(toolQuads, toolSeconds, toolQuadsPerSecond);
@@ -208,7 +254,7 @@ public sealed partial class StepChecks
     private static async Task EnsureLoadedAsync(SnapshotManifest manifest)
     {
         ProcessResult count = await Stack.ToolAsync("count", TimeSpan.FromMinutes(1));
-        if (count.ExitCode == 0 && count.Output.Contains("answer: " + manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture) + " catalog commits", StringComparison.Ordinal))
+        if (count.ExitCode == 0 && count.Output.Contains("answer: " + manifest.Base?.Packages.ToString(CultureInfo.InvariantCulture) + " base states and " + manifest.Counts.CatalogCommitsRetained.ToString(CultureInfo.InvariantCulture) + " catalog commits", StringComparison.Ordinal))
         {
             return;
         }
@@ -251,6 +297,17 @@ public sealed partial class StepChecks
         double tolerance = 0.05 + (count / (seconds * seconds) * 0.0005);
         Assert.True(Math.Abs(exact - printedRate) <= tolerance, "Printed " + printedRate.ToString(CultureInfo.InvariantCulture) + "/s for " + count + " in " + seconds.ToString(CultureInfo.InvariantCulture) + " s, which is " + exact.ToString(CultureInfo.InvariantCulture) + "/s.");
     }
+
+    private static Match BaseProgress(string printed)
+    {
+        Match[] matches = [.. BaseLine().Matches(printed).Cast<Match>()];
+        Assert.True(matches.Length > 0, "No base progress line in:\n" + Stack.Indent(printed));
+        Assert.Equal(matches[^1].Groups["done"].Value, matches[^1].Groups["total"].Value);
+        return matches[^1];
+    }
+
+    [GeneratedRegex(@"base: (?<done>\d+)/(?<total>\d+) packages, (?<quads>\d+) quads, (?<seconds>[\d.]+) s, (?<cps>[\d.]+) commits/s, (?<qps>[\d.]+) quads/s", RegexOptions.CultureInvariant)]
+    private static partial Regex BaseLine();
 
     [GeneratedRegex(@"import: (?<done>\d+)/(?<total>\d+) catalog commits, (?<quads>\d+) quads, (?<seconds>[\d.]+) s, (?<cps>[\d.]+) commits/s, (?<qps>[\d.]+) quads/s", RegexOptions.CultureInvariant)]
     private static partial Regex ProgressLine();
