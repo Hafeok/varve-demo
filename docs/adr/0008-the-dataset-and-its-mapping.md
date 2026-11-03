@@ -241,6 +241,24 @@ amendment):
 
 S1's target of 3 minutes holds. CI's numbers are in the pull request.
 
+**The deep history, measured** (the maintainer's ruling 5). Run with
+`varve-demo import --since 2019-09-23`, the first deprecation data found
+above. It ran on this session's machine, against its own Varve
+`0.1.0-preview.15` container, with no memory limit:
+
+| | |
+|---|---|
+| deep-history snapshot built from nuget.org | about 33 min: 14 547 catalog pages, 657 013 leaves pruned by the base's rule, 1.5 GB |
+| replay | 237 766 catalog commits, 13 557 795 quads, in 28.7 min (138 commits a second on average, slowing from about 460 to about 140 as the commits grow) |
+| final checkpoint | 122 s |
+| total | 63.7 min |
+| the dataset on disk | 3.5 GB |
+| the server's resident memory | up to 1.2 GB while replaying, 4.5 GB after the final checkpoint |
+
+That run's tool predates the package id (ADR 0010's amendment), so a run
+today adds 657 013 quads, about 5%. It is not a step check: it is an hour,
+and its memory is beyond a laptop's comfortable share.
+
 **CI** rebuilds the snapshot from nuget.org only when what it is a function of
 changes (`snapshot/`, the builder, the mapping), weekly, and on
 `workflow_dispatch`. A rebuild that differs from the committed manifest fails

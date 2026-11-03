@@ -85,8 +85,9 @@ varve-demo import --since 2019-09-23
 ```
 
 That replays the catalog from any date, with no base. From the first
-deprecation data in 2019 it takes far longer than S1's target; the measured
-time is in ADR 0008's amendment.
+deprecation data, on 2019-09-23, it took 63.7 minutes on a cloud machine:
+33 minutes to build that history from nuget.org, then 237 766 catalog
+commits replayed in 29 minutes. The server peaked at 4.5 GB of memory.
 
 **What is stored.** Varve holds the catalog's advisory state of each
 version: its id, version, listing, deprecation and vulnerabilities, in the
