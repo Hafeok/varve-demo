@@ -19,12 +19,77 @@ append-only log, the NuGet catalog:
 - the same engine answering the same query in the browser, offline;
 - the database as files you can clone.
 
-## Status: nothing runs yet
+## Status: S1 and S2 are built, not yet passing
 
-**No step runs today.** This repository holds the specification, the
-decisions, the build and the gates that will hold the steps to it. Every step
-below is `pending`. A step becomes `passing` only when CI runs it end to end
-against a released Varve.
+S1 and S2 are built, and their checks pass on a local run. They become
+`passing` when CI runs them end to end against a released Varve. That waits
+on the importer image being published to GHCR, which `compose.yaml` pins by
+digest; `compose.yaml` lands with that digest. Every other step is
+`pending`.
+
+## Run it
+
+You need Docker. From a clone of this repository:
+
+```bash
+docker compose up
+```
+
+That starts four services and stops one of them when it is done:
+
+| Service | What it does | On your machine |
+|---|---|---|
+| `mock-oauth2` | the OIDC issuer, a **mock** that signs a token for anyone who asks | `localhost:8090` |
+| `varve` | the released Varve server, OIDC only; the dataset is on the volume `varve-data` | `localhost:8080` |
+| `setup` | applies [`deploy/nuget.trig`](deploy/nuget.trig) (the dataset and its grants) as the bootstrap operator, once, then exits | |
+| `importer` | replays the pinned snapshot over HTTP, one Varve commit per catalog commit, prints the rate, takes the final checkpoint, prints the first answer, then exits | |
+
+Then ask S2's question of a lock file with the demo's tool:
+
+```bash
+dotnet run --project src/VarveDemo.Tool -- deps --lock samples/packages.lock.json
+```
+
+`varve-demo` ([ADR 0012](docs/adr/0012-the-demo-tool.md)) is a .NET tool. It
+is not on nuget.org yet: it is published there from the demo's first
+release. Until then, run it from a clone as above, or pack it and install it
+from a local folder, as CI does.
+
+**What each client may do.** Each long-running client holds only what it
+needs ([ADR 0007](docs/adr/0007-local-authentication-with-a-mock-oidc-issuer.md)
+and its amendment):
+
+- `varve-demo-importer` writes the dataset;
+- `varve-demo-viewer` reads it;
+- `varve-demo-checkpointer` is the dataset's admin, for the checkpoint, and
+  nothing more;
+- `varve-demo-operator` creates the dataset and is used once, by `setup`.
+
+The importer process holds the importer's and the checkpointer's
+credentials. With the mock issuer these are client ids with no real secret.
+
+**What history is loaded.** The snapshot is the catalog leaves of the top
+3 000 packages by downloads, from **2026-10-20 to 2026-11-03**, pinned by
+hash ([`snapshot/manifest.json`](snapshot/manifest.json)). That is
+1 731 catalog commits and 1 753 337 quads. The catalog carries deprecation
+data from 2019 and vulnerability data from 2020. Replaying from there takes
+hours, not minutes, so S1's window is two weeks. A version with no leaf in
+those two weeks is reported as outside the subset, never as clean
+([ADR 0008](docs/adr/0008-the-dataset-and-its-mapping.md), amendment of
+2026-11-03).
+
+**Names.** The catalog's JSON-LD is read by Varve's own reader,
+`Varve.JsonLd`, with the catalog's own terms. The few names the demo adds
+are in `urn:varve-demo:`, which is not a registered URN namespace: they name
+things in this dataset and resolve nowhere
+([ADR 0010](docs/adr/0010-the-graph-model-and-vocabulary.md)).
+
+**Images.** Every image is pulled from `ghcr.io` by tag and digest. The
+importer's image, `ghcr.io/hafeok/varve-demo-importer`, is built by this
+repository's CI. Its base is the chiseled .NET `runtime-deps` image from MCR,
+the same exception Varve's own image makes
+([ADR 0011](docs/adr/0011-our-container-images.md)). A clean machine can pull
+it only once the package is public on GHCR.
 
 ## The script
 
