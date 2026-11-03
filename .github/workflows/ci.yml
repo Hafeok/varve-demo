@@ -1,6 +1,8 @@
-# Restore, build in Release, run the gates with TRX output, upload the results.
+# Restore, build in Release, run the gates with TRX output, upload the results;
+# then the steps job: rebuild the snapshot from nuget.org, build and push the
+# importer image, verify attestations, and run the step checks end to end.
 # Actions are pinned by full commit SHA, at the SHAs Varve's workflows pin
-# (ADR 0003).
+# (ADRs 0003, 0011).
 
 name: ci
 
@@ -16,13 +18,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
 jobs:
   build:
     name: build and test
     runs-on: ubuntu-latest
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -49,4 +52,146 @@ jobs:
         with:
           name: test-results
           path: TestResults/**/*.trx
+          if-no-files-found: error
+
+  steps:
+    name: steps (S1, S2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # The importer image, pushed as pr-<sha> or main-<sha> (ADR 0011).
+      packages: write
+      # Its build provenance, attested and verified like Varve's (ADR 0002).
+      id-token: write
+      attestations: write
+    env:
+      IMPORTER: ghcr.io/hafeok/varve-demo-importer
+      VARVE_IMAGE_DIGEST: sha256:f3c1651a11256d35be1330b82d207a9d8b50ff1f39fb61b2ac059087d592d706
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build VarveDemo.slnx -c Release
+
+      # ADR 0008: the committed manifest is a claim that the snapshot rebuilds
+      # from nuget.org byte for byte. This makes it a test.
+      - name: Rebuild the snapshot from nuget.org and compare
+        run: >-
+          dotnet run --project src/VarveDemo.Tool -c Release --no-build --
+          snapshot build --inputs snapshot --out "$RUNNER_TEMP/snapshot"
+          --check snapshot/manifest.json
+
+      - name: The version key agrees with NuGet.Versioning on every version
+        env:
+          VARVE_DEMO_SNAPSHOT_DIR: ${{ runner.temp }}/snapshot
+        run: >-
+          dotnet test --project tests/VarveDemo.Steps.Tests -c Release --no-build
+          --filter-method "*The_key_orders_every_version_in_the_snapshot_as_nuget_does"
+
+      - name: Verify the Varve image's attestation (ADR 0002)
+        run: gh attestation verify "oci://ghcr.io/hafeok/varve@$VARVE_IMAGE_DIGEST" --owner hafeok
+
+      - name: Publish the importer as Native AOT (ADR 0011)
+        run: |
+          dotnet publish src/VarveDemo.Tool -c Release -r linux-x64 -p:PublishAot=true -o artifacts/importer
+          mkdir -p artifacts/importer/cache
+
+      - name: Build and push the importer image
+        id: image
+        run: |
+          tag="pr-${{ github.event.pull_request.head.sha || github.sha }}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then tag="main-${{ github.sha }}"; fi
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f deploy/images/importer/Dockerfile -t "$IMPORTER:$tag" artifacts/importer
+          docker push "$IMPORTER:$tag"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMPORTER:$tag" | cut -d@ -f2)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "importer image: $IMPORTER:$tag@$digest" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest the importer image's build provenance (ADR 0011)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMPORTER }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify the importer image's attestation
+        run: gh attestation verify "oci://$IMPORTER@${{ steps.image.outputs.digest }}" --owner hafeok
+
+      - name: Pack the tool and install it from a local source (ADR 0012)
+        run: |
+          dotnet pack src/VarveDemo.Tool -c Release -o artifacts/tool
+          cat > "$RUNNER_TEMP/tool.nuget.config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$PWD/artifacts/tool" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet tool install VarveDemo.Tool --version 0.1.0 --tool-path artifacts/tool-bin --configfile "$RUNNER_TEMP/tool.nuget.config"
+          artifacts/tool-bin/varve-demo --version
+
+      # The run's own image and the rebuilt snapshot, over compose.yaml. The
+      # override is written here, never committed.
+      - name: Point compose at this run's image and snapshot
+        run: |
+          mkdir -p "$RUNNER_TEMP/results"
+          chmod 777 "$RUNNER_TEMP/results"
+          cat > "$RUNNER_TEMP/compose.ci.yaml" <<EOF
+          services:
+            importer:
+              image: $IMPORTER:${{ steps.image.outputs.tag }}@${{ steps.image.outputs.digest }}
+              environment:
+                VARVE_DEMO_SNAPSHOT: /snapshot
+                VARVE_DEMO_RESULTS: /results/s1-compose-import.json
+              volumes:
+                - $RUNNER_TEMP/snapshot:/snapshot:ro
+                - $RUNNER_TEMP/results:/results
+          EOF
+          cat "$RUNNER_TEMP/compose.ci.yaml"
+
+      - name: S1_ZeroToQuery and S2_DeprecatedAndVulnerableDependencies
+        env:
+          VARVE_DEMO_STEPS: "1"
+          VARVE_DEMO_COMPOSE_FILES: compose.yaml;${{ runner.temp }}/compose.ci.yaml
+          VARVE_DEMO_SNAPSHOT_DIR: ${{ runner.temp }}/snapshot
+          VARVE_DEMO_TOOL: ${{ github.workspace }}/artifacts/tool-bin/varve-demo
+          VARVE_DEMO_RESULTS_DIR: ${{ runner.temp }}/results
+        run: >-
+          dotnet test --project tests/VarveDemo.Steps.Tests -c Release --no-build
+          --filter-method "*S1_ZeroToQuery" --filter-method "*S2_DeprecatedAndVulnerableDependencies"
+          --report-trx --results-directory "${{ github.workspace }}/TestResults"
+
+      - name: The stack's logs
+        if: ${{ always() }}
+        run: docker compose -f compose.yaml -f "$RUNNER_TEMP/compose.ci.yaml" logs --no-color > "$RUNNER_TEMP/results/compose.log" 2>&1 || true
+
+      - name: Measurements summary
+        if: ${{ always() }}
+        run: |
+          for f in "$RUNNER_TEMP"/results/S*.json; do
+            [ -f "$f" ] || continue
+            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+            python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [print('- %s: %.3f %s%s' % (m['name'], m['value'], m['unit'], (' (target %s %s, %s)' % (m['comparison'], m['target'], 'met' if m['met'] else 'MISSED')) if 'target' in m else '')) for m in d['measurements']]" "$f" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload the measurements
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: step-measurements
+          path: |
+            ${{ runner.temp }}/results
+            TestResults/**/*.trx
           if-no-files-found: error
