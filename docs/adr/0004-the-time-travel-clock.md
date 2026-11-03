@@ -293,3 +293,52 @@ Filed unaccepted by session 03, on #5, at the maintainer's rulings.
 
 Point 6's checkpoint rule is unchanged, as the maintainer ruled: no
 checkpoints during the import, one at its end.
+
+## Amendment, 2026-11-03: memory, measured; checkpoints during the import are not proposed
+
+Filed unaccepted by session 03, on #5, after the maintainer's ruling to test
+the import under a memory limit, and to propose checkpoints during long
+imports for memory if the server failed under it.
+
+**What was measured.** Varve `v0.1.0-preview.15`, on this session's machine.
+The server is limited to 512 MB with a compose override (CI only, never the
+viewer's compose).
+
+| Import | Under 512 MB |
+|---|---|
+| the window, whole-leaf model (1 731 commits, 1.75M quads) | refused at commit 607: `400 operation-failed`, "Insufficient memory" |
+| the base and window, advisory-state model (ADR 0010's amendment) | refused at base commit 1 068 of 3 000, about 1.41M quads: `503 unavailable`, "The default projection failed at position 1067 and must be rebuilt: Insufficient memory" |
+| the same, with a checkpoint every 250 commits | refused at the same commit |
+
+In none was the container OOM-killed. The server refuses the write and keeps
+running.
+
+Resident memory, without a limit, through S1 with the base:
+
+- 45 MB at start;
+- 576 MB at the end of the import, before the final checkpoint;
+- 1.10 GB after it;
+- 133 MB after a restart.
+
+After a refusal under 512 MB:
+
+- a restart under the same limit does not reopen the dataset within 60 s;
+  it cycles between `closed` and not ready;
+- a restart without the limit reopens it in about 10 s, at 680 MB to 705 MB,
+  with every acknowledged commit present.
+
+**What it means.** The server's memory grows with the data committed since
+the process started. A checkpoint does not release it within the running
+process: a checkpoint every 250 commits changed nothing. Opening a dataset
+needs memory proportional to the commits above its newest checkpoint. The log
+on disk is safe: no acknowledged commit was lost in any run.
+
+**So checkpoints during the import are not proposed.** They were the remedy
+the ruling named. They were measured not to bound the importing process's
+memory, so adding them would cost import time for nothing S1 needs. Point 6
+stands unchanged. The finding is a Varve issue draft, in the slice's
+traceability record, with these numbers and the reproduction.
+`ImportUnderAMemoryLimit` keeps measuring it in CI, and fails only if an
+acknowledged commit is lost. The importer keeps
+`VarveDemo:Checkpoints:ForMemoryEveryCommits`, 0 by default, so the
+measurement can be repeated on a later Varve.

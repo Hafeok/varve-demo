@@ -168,3 +168,92 @@ since one advisory reflow rewrote hundreds of large SixLabors.ImageSharp
 leaves several times. At the same rate that is about six minutes, over S1's
 budget.
 
+
+**The decision: a base as of T0, then the window** (the maintainer's ruling
+of 2026-11-03). A window alone was rejected for these reasons:
+
+- a version enters the snapshot only if a leaf lands in the window, so a
+  viewer's own lock file would mostly answer "outside the subset";
+- "lowest clean version" would ignore most versions;
+- a sample that passes because it was picked from the window would read as
+  rigged.
+
+So:
+
+1. **The base.** For every version of the N packages, its latest catalog leaf
+   before the window's lower bound T0. The snapshot builder derives it from
+   every catalog page before T0, deterministically: the latest leaf by
+   `commitTimeStamp`, ties by URL. A version whose latest leaf before T0 is a
+   delete is absent. The base's files hold each leaf pruned to the members
+   the graph model reads, by the rule the manifest records (ADR 0010's
+   amendment). The window's leaves are whole.
+2. **The import loads the base first, over HTTP**, one Varve commit per
+   package, as the importer, so every base commit carries the importer's
+   agent (ADR 0007). Each base commit asserts in
+   `<urn:varve-demo:catalog-log>` that it is the package's state as of T0
+   (ADR 0010's amendment), so the time index places it at T0 (ADR 0004's
+   amendment). Then the window is replayed, one commit per catalog commit,
+   as before. The importer refuses a dataset that is not empty.
+3. **What the viewer is told.** S1's screen and S3's slider say plainly that
+   the base is the catalog's state as of T0, that history before T0 is not
+   replayed, and that the slider starts at T0. S2's "outside the subset"
+   means outside the N packages.
+4. **The deep history stays rerunnable.** `varve-demo import --since <date>`
+   rebuilds from the catalog every catalog commit from that date to the
+   snapshot's upper bound, with no base, and replays it. It is never run in
+   the step checks.
+5. **T0 is 2026-10-20T00:00:00Z and the upper bound 2026-11-03T00:00:00Z**
+   (`snapshot/inputs.json`). The window holds S3's story: advisory
+   `GHSA-v76p-62qx-wwq2` is added to SixLabors.ImageSharp 3.0.0, 3.0.1,
+   3.0.2 and 15 other versions at `2026-10-26T16:04:33.9723859Z`, after
+   earlier leaves of the same versions inside the window.
+
+**The snapshot** (`snapshot/manifest.json`, sha256
+`edb36caaa27f45b517f6977987bb7e9f1202e72f5e567085db24deb39275dc9e`):
+
+| | |
+|---|---|
+| base | 3 000 packages, 512 390 versions (46 deleted before T0), 3 018 866 quads |
+| window | 1 731 catalog commits retained, 27 138 skipped, 5 255 leaves, 36 128 quads |
+| files | 661 MB on disk; 22.5 MB as one `tar.gz` release asset, far below GitHub's 2 GB per asset, so not split |
+| built from nuget.org | 24 min 50 s on this session's machine: every catalog page, and about 517 000 leaves |
+
+**The projection, before the full run** (the maintainer's ruling). Samples
+were taken from the base with the seed `varve-demo slice 1a projection
+2026-11-03`:
+
+- **1% of versions:** 5 137 versions, 4.73 quads a version under the model.
+- **1% and 5% of packages, every version of each**, for realistic commit
+  sizes: the 5% sample, 23 788 versions, loaded at 27 235 quads a second.
+
+The importer's own CPU was the bottleneck. The base was projected at about
+2.43M quads and 85 s to 90 s, and S1 at about 134 s here, about 100 s on CI's
+faster runner. Measured since, with the package id added (ADR 0010's
+amendment):
+
+| S1 on this session's machine | |
+|---|---|
+| `docker compose up` to the first answer, snapshot mounted | 109 s; in the check, 113.6 s |
+| the same, snapshot downloaded over HTTP | 125.5 s, with the deep-history run competing for the CPU |
+| base | 72.6 s to 84.9 s, 35 000 to 41 000 quads a second |
+| window | 12.4 s to 14.0 s |
+| final checkpoint | 16.3 s to 20.9 s |
+
+S1's target of 3 minutes holds. CI's numbers are in the pull request.
+
+**CI** rebuilds the snapshot from nuget.org only when what it is a function of
+changes (`snapshot/`, the builder, the mapping), weekly, and on
+`workflow_dispatch`. A rebuild that differs from the committed manifest fails
+the run. Every other run downloads the published asset, verifies it file by
+file against the manifest, and caches it by its hash. The cache is
+`actions/cache`, which this amendment admits at the SHA Varve's workflows pin
+(`55cc8345863c7cc4c66a329aec7e433d2d1c52a9`, v6).
+
+Rulings superseded by this amendment, under new keys filed unaccepted:
+
+- `SnapshotIsAHashedReleaseAsset` by `SnapshotIsBaseAndWindowHashed`;
+- `WindowStartsWhereTheCatalogCarriesAdvisories` by
+  `BaseAtTheWindowsLowerBound`;
+- `FullReplayOverHttp` by `BaseThenFullReplayOverHttp`.
+
+The old keys leave the set, and their text is kept in its notes.

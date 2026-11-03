@@ -88,6 +88,13 @@ That replays the catalog from any date, with no base. From the first
 deprecation data in 2019 it takes far longer than S1's target; the measured
 time is in ADR 0008's amendment.
 
+**What is stored.** Varve holds the catalog's advisory state of each
+version: its id, version, listing, deprecation and vulnerabilities, in the
+catalog's own terms. It does not hold the whole catalog; dependency groups
+and the rest of each leaf are read and dropped
+([ADR 0010](docs/adr/0010-the-graph-model-and-vocabulary.md), amendment of
+2026-11-03).
+
 **Names.** The catalog's JSON-LD is read by Varve's own reader,
 `Varve.JsonLd`, with the catalog's own terms. The few names the demo adds
 are in `urn:varve-demo:`, which is not a registered URN namespace: they name

@@ -21,11 +21,13 @@ decisions:
     statement: "Every leaf is read whole by Varve.JsonLd and the store keeps only the catalog's advisory state: id, version, listed, deprecation with reasons and alternate package and range, vulnerabilities with advisory URL and severity, and the version key; base leaves may be stored pruned to those members by the rule the manifest records, and the oracle reads the same fields"
   - key: BaseStateInTheCatalogLog
     statement: "Each base commit asserts urn:varve-demo:base:id in urn:varve-demo:catalog-log with vd:basePackage and vd:baseAsOf T0, so the time index places the base at T0"
+  - key: PackageIdForLookup
+    statement: "The importer asserts urn:varve-demo:term:packageId, the package id lower-cased, on each leaf, so a query finds a package's versions by index; it is identity, not a derived flag"
 ---
 
 The rulings of [ADR 0010](../adr/0010-the-graph-model-and-vocabulary.md), filed
 unaccepted by session 03 on #5, 2026-11-03. Every citation is `CS0618` until
 the maintainer accepts them.
 
-`LeafProjectedToWhatTheStepsRead` and `BaseStateInTheCatalogLog` are the
-2026-11-03 amendment's rulings, filed unaccepted by session 03 on #5.
+`LeafProjectedToWhatTheStepsRead`, `BaseStateInTheCatalogLog` and
+`PackageIdForLookup` are the 2026-11-03 amendment's rulings, filed unaccepted by session 03 on #5.

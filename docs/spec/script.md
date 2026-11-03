@@ -128,7 +128,9 @@ per second and quads per second for each:
 It names N, T0 and the window, and says plainly that the base is the catalog's
 state as of T0 and that history before T0 is not replayed;
 `varve-demo import --since <date>` replays it from any date (ADR 0008's
-amendment). It takes the final checkpoint, as the
+amendment). The store holds the catalog's advisory state of each version
+(identity, listing, deprecation and vulnerabilities), not the whole catalog,
+and the screen says so (ADR 0010's amendment). It takes the final checkpoint, as the
 dataset's admin, and says so. The first answer then prints: the number of
 catalog commits the dataset holds, which the snapshot's manifest predicts,
 with the query beside it. CI measures the time from the command to that

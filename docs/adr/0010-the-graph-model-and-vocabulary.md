@@ -147,7 +147,8 @@ produces, the importer keeps these, and only these
 | the alternate package | `nuget:id`, `nuget:range` |
 | each vulnerability | `nuget:advisoryUrl`, `nuget:severity` |
 
-The importer adds the version key (point 5). **Everything else is dropped**:
+The importer adds the version key (point 5) and the package id lower-cased
+(below). **Everything else is dropped**:
 dependency groups and their dependencies, package entries, `rdf:type`,
 `isPrerelease` (the version key says it), descriptions, summaries, authors,
 owners, tags, icons, URLs, licences, release notes, sizes, hashes,
@@ -179,6 +180,16 @@ takes it from the version key.
 `<urn:varve-demo:term:baseAsOf>` (T0 as `xsd:dateTime`). These are two more
 derived terms in point 3's namespace.
 
-Its rulings are `LeafProjectedToWhatTheStepsRead` and
-`BaseStateInTheCatalogLog`, filed unaccepted. The first is restated below to
-match this text.
+**The package id, lower-cased: `<urn:varve-demo:term:packageId>`.** With the
+base loaded, S2's search for "the lowest clean version above it" must find a
+package's versions among 515 772 version graphs. The catalog's `nuget:id`
+keeps each version's own casing, which varies between versions of one
+package, so no exact match finds them all. A filter on the graph name scans
+every version: S2 took 14 s to 27 s, past its 2 s target and up to Varve's
+read limit. The importer therefore asserts, on each leaf, the id lower-cased,
+and the query finds a package's versions by that literal. It is identity,
+like the graph name it mirrors, not a flag on the catalog's state, so point 7
+stands. With it, S2's query answers in 117 ms to 154 ms on the full base.
+
+Its rulings are `LeafProjectedToWhatTheStepsRead`, `BaseStateInTheCatalogLog`
+and `PackageIdForLookup`, filed unaccepted.
