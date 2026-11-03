@@ -18,13 +18,15 @@
 
   <!--
     THE VARVE PIN (ADR 0002). One property, the latest Varve release, resolved
-    from nuget.org on 2026-10-23. compose.yaml's image tag must equal
+    from nuget.org on 2026-11-03 (0.1.0-preview.15, published 2026-10-26).
+    Its image is ghcr.io/hafeok/varve:v0.1.0-preview.15@sha256:f3c1651a11256d35be1330b82d207a9d8b50ff1f39fb61b2ac059087d592d706,
+    resolved from ghcr.io the same day. compose.yaml's image tag must equal
     v$(VarveVersion); a spec test holds the two together once compose.yaml
     exists. A bump is one pull request that reruns every check and
     regenerates the evidence page.
   -->
   <PropertyGroup>
-    <VarveVersion>0.1.0-preview.11</VarveVersion>
+    <VarveVersion>0.1.0-preview.15</VarveVersion>
   </PropertyGroup>
 
   <ItemGroup Label="Varve, as released (ADR 0002)">
