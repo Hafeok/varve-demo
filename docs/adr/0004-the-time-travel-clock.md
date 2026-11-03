@@ -206,3 +206,48 @@ not a clock: an unlisted version's is `1900-01-01T00:00:00Z`.
 - A bump re-checks the bound's meaning, its default, and whether the server
   has gained a checkpoint policy.
 - When Varve ships a domain clock, S3 gets simpler and this ADR is superseded.
+
+## Amendment, 2026-11-03: re-checked against `v0.1.0-preview.15`
+
+Filed unaccepted by session 03, on #3, the bump to `0.1.0-preview.15`.
+
+**The checkpoint and distance reasoning holds.** Between `v0.1.0-preview.11`
+and `v0.1.0-preview.15`:
+
+- `Dataset.AsOfLogDistance` is unchanged, body and comment; it moved to
+  `src/Varve.Store/DatasetExtents.cs:1396-1413`. The `422` check in
+  `src/Varve.Protocol/Http/Reads.cs:179-198`, `ProtocolLimits.MaxAsOfDistance`
+  (default 10 000), `SettingsCheck.cs:268` and the service description's
+  `varve:maxAsOfDistance` (`ServiceDescriptionEndpoint.cs:239`) are
+  unchanged.
+- The server still takes no checkpoints of its own:
+  `DatasetOptions.Checkpoints` is still `CheckpointPolicy.Never`
+  (`src/Varve.Store/Dataset.cs:72-74`), the server builds its options without
+  one, now at `src/Varve.Server/OpenDatasets.cs:413`, and `Settings.cs` is
+  unchanged. The operator guide's sentence is unchanged
+  (`docs/operator/backup-and-restore.md:58-59`).
+- The checkpoint route is now `ManagementEndpoints.cs:390-399`, unchanged in
+  substance. The status endpoint still demands `admin`; that call is at
+  `src/Varve.Protocol/Endpoints/StatusEndpoint.cs:30`, and was at line 30 at
+  `v0.1.0-preview.11` too, so the Context's "29" was off by one when written.
+  `v0.1.0-preview.13` added an `events` member to the status body (Varve
+  ADR 0167); the `checkpoints` array the demo reads is unchanged.
+
+**What `v0.1.0-preview.15` changes, and why it does not move this ADR.** As-of
+reads inside an extent set now seek instead of narrowing the set (Varve
+ADR 0177, derived format 5 for extents), and `MaxSetBytes` now bounds merges,
+not reads (Varve ADR 0178; ADR 0159 amended). Both change what an as-of read
+served from the extents *costs*, not whether it replays the log: the distance
+is still 0 at or below the newest extent set's end, and the bound still
+counts commits replayed above the nearest checkpoint. Point 3's wording,
+"served from the extents up to checkpoint `c`, no log replayed", stays true
+and is now cheaper. This ADR never relied on `MaxSetBytes` bounding a read.
+
+**The Varve issues are filed.** Point 8's "a checkpoint policy configurable on
+the server" is [Hafeok/Varve#159](https://github.com/Hafeok/Varve/issues/159);
+point 9's "as-of by a declared domain clock" is
+[Hafeok/Varve#157](https://github.com/Hafeok/Varve/issues/157). The operator
+guide's description of `MaxAsOfDistance` as a distance below the head, which
+led this ADR's first draft astray, is
+[Hafeok/Varve#161](https://github.com/Hafeok/Varve/issues/161); at
+`v0.1.0-preview.15` `docs/operator/configure.md:169` still says it.

@@ -117,3 +117,23 @@ What Varve has, read at `v0.1.0-preview.11`:
   moves, with this ADR amended.
 - The grant declarations follow Varve's management-plane vocabulary, so a
   breaking change there is a bump's work.
+
+## Amendment, 2026-11-03: re-checked against `v0.1.0-preview.15`
+
+Filed unaccepted by session 03, on #3, the bump to `0.1.0-preview.15`.
+
+- `Identity.cs`, `Writes.cs`, `Permissions.cs`, `Settings.cs`,
+  `GrantTable.cs` and `AdminEndpoints.cs` are unchanged, so point 5's account
+  of the agent and point 4's of the permissions hold.
+- `ServerHost.cs` changed, but the lines point 4 cites (376-381, 415,
+  459-470) are the same code at the same lines.
+- In `ManagementEndpoints.cs`, the apply authorisation point 4 cites
+  (679-692) is now at 783-796, unchanged; the checkpoint route (389-398) is
+  now at 390-399.
+- The status endpoint's `admin` check is at `StatusEndpoint.cs:30`, as it was
+  at `v0.1.0-preview.11`; point 4's "29" was off by one when written.
+- Varve's `.github/ci-images.yaml` still pins
+  `ghcr.io/navikt/mock-oauth2-server:6.0.4` at the digest point 2 names.
+
+Point 5's case of a token under OIDC that yields no agent is filed as
+[Hafeok/Varve#162](https://github.com/Hafeok/Varve/issues/162).
