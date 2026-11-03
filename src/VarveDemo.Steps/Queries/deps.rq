@@ -1,0 +1,70 @@
+# S2: which of my dependencies resolve to a deprecated or vulnerable
+# version, and what should I move to? (docs/spec/script.md, S2)
+#
+# One row per locked package version. ?g is its version's graph (ADR 0008
+# point 4); ?key is unbound when the snapshot holds no leaf for it. Terms
+# are the catalog's own (ADR 0010); versions are ordered by the importer's
+# version key, which is NuGet's version order as a string.
+PREFIX nuget: <http://schema.nuget.org/schema#>
+PREFIX vd: <urn:varve-demo:term:>
+
+SELECT ?lockId ?lockVersion ?key ?deprecated ?reasons ?alternate ?alternateVersions ?advisories
+       (MIN(CONCAT(?candidateKey, " ", ?candidateVersion)) AS ?lowestClean)
+WHERE {
+  # The locked versions: deprecation and advisories, as the catalog states them.
+  {
+    SELECT ?lockId ?lockVersion ?package ?key ?prerelease
+           (SAMPLE(?deprecation) AS ?deprecated)
+           (GROUP_CONCAT(DISTINCT ?reason; separator=",") AS ?reasons)
+           (SAMPLE(?alternateId) AS ?alternate)
+           (SAMPLE(?alternateRange) AS ?alternateVersions)
+           (GROUP_CONCAT(DISTINCT CONCAT(?advisory, " ", ?severity); separator=",") AS ?advisories)
+    WHERE {
+      VALUES (?lockId ?lockVersion ?g ?package) { }
+      OPTIONAL {
+        GRAPH ?g { ?leaf vd:versionKey ?key ; nuget:isPrerelease ?prerelease . }
+        OPTIONAL {
+          GRAPH ?g {
+            ?leaf nuget:deprecation ?deprecation .
+            OPTIONAL { ?deprecation nuget:reasons ?reason . }
+            OPTIONAL {
+              ?deprecation nuget:alternatePackage ?alternatePackage .
+              ?alternatePackage nuget:id ?alternateId .
+              OPTIONAL { ?alternatePackage nuget:range ?alternateRange . }
+            }
+          }
+        }
+        OPTIONAL {
+          GRAPH ?g {
+            ?leaf nuget:vulnerability ?vulnerability .
+            ?vulnerability nuget:advisoryUrl ?advisory ; nuget:severity ?severity .
+          }
+        }
+      }
+    }
+    GROUP BY ?lockId ?lockVersion ?package ?key ?prerelease
+  }
+
+  # The lowest listed version above it, of the same package, with no known
+  # vulnerability and no deprecation; a prerelease only for a prerelease.
+  OPTIONAL {
+    {
+      SELECT ?package ?candidateKey ?candidateVersion ?candidatePrerelease
+      WHERE {
+        VALUES ?package { }
+        GRAPH ?candidate {
+          ?candidateLeaf vd:versionKey ?candidateKey ;
+            nuget:version ?candidateVersion ;
+            nuget:listed true ;
+            nuget:isPrerelease ?candidatePrerelease .
+        }
+        FILTER (STRSTARTS(STR(?candidate), ?package))
+        FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:vulnerability ?any . } }
+        FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:deprecation ?some . } }
+      }
+    }
+    FILTER (?candidateKey > ?key && (?prerelease || !?candidatePrerelease))
+  }
+}
+GROUP BY ?lockId ?lockVersion ?key ?deprecated ?reasons ?alternate ?alternateVersions ?advisories
+ORDER BY ?lockId ?lockVersion

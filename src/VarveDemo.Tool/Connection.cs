@@ -18,8 +18,13 @@ internal sealed class Connection : IDisposable
 
     public Connection(Arguments arguments)
     {
-        Server = new DemoServer(_http, arguments.Uri("server"), arguments.OrDefault("dataset", "nuget"));
-        Issuer = new IssuerEndpoint(arguments.Uri("issuer"), arguments.Optional("issuer-address") is { } address ? new Uri(address) : null);
+        // The defaults are the compose stack's, seen from the machine it runs
+        // on: Varve on localhost:8080, the mock issuer on localhost:8090 under
+        // the name the server knows it by (compose.yaml).
+        Server = new DemoServer(_http, new Uri(arguments.OrDefault("server", "http://localhost:8080")), arguments.OrDefault("dataset", "nuget"));
+        string? issuer = arguments.Optional("issuer");
+        string? address = arguments.Optional("issuer-address") ?? (issuer is null ? "http://localhost:8090" : null);
+        Issuer = new IssuerEndpoint(new Uri(issuer ?? "http://mock-oauth2:8080/varve-demo"), address is null ? null : new Uri(address));
         Arguments = arguments;
     }
 

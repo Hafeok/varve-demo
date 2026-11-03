@@ -68,6 +68,7 @@ internal static class Program
             ("snapshot", "pack") => SnapshotCommands.PackAsync(new Arguments(args, 2), cancellationToken),
             ("import", _) => ImportCommand.RunAsync(new Arguments(args, 1), cancellationToken),
             ("count", _) => StepCommands.CountAsync(new Arguments(args, 1), cancellationToken),
+            ("deps", _) => StepCommands.DepsAsync(new Arguments(args, 1), cancellationToken),
             ("--version", _) => Version(),
             _ => throw new UsageException(command.Length == 0 ? "No command." : "Unknown command " + string.Join(' ', args[..Math.Min(2, args.Length)]) + "."),
         };

@@ -185,7 +185,9 @@ public sealed class ImportRun
             }
         }
 
-        TimeSpan elapsed = clock.Elapsed;
+        // The final line's rates are its own counts over its own printed time,
+        // so a viewer (and S1's check, criterion 5) can redo the division.
+        TimeSpan elapsed = TimeSpan.FromMilliseconds(Math.Round(clock.Elapsed.TotalMilliseconds));
         await Progress(acknowledged.Count, manifest.Counts.CatalogCommitsRetained, quads, elapsed, last).ConfigureAwait(false);
 
         if (acknowledged.Count != manifest.Counts.CatalogCommitsRetained || quads != manifest.Counts.Quads)
@@ -255,6 +257,6 @@ public sealed class ImportRun
     {
         double seconds = Math.Max(elapsed.TotalSeconds, 1e-9);
         return _out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture,
-            $"import: {commits}/{total} catalog commits, {quads} quads, {elapsed.TotalSeconds:0.0} s, {commits / seconds:0.0} commits/s, {quads / seconds:0} quads/s, position {position}"));
+            $"import: {commits}/{total} catalog commits, {quads} quads, {elapsed.TotalSeconds:0.000} s, {commits / seconds:0.0} commits/s, {quads / seconds:0.0} quads/s, position {position}"));
     }
 }
