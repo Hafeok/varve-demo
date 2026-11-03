@@ -151,7 +151,6 @@ jobs:
           cat > "$RUNNER_TEMP/compose.ci.yaml" <<EOF
           services:
             importer:
-              image: $IMPORTER:${{ steps.image.outputs.tag }}@${{ steps.image.outputs.digest }}
               environment:
                 VARVE_DEMO_SNAPSHOT: /snapshot
                 VARVE_DEMO_RESULTS: /results/s1-compose-import.json
@@ -164,6 +163,8 @@ jobs:
       - name: S1_ZeroToQuery and S2_DeprecatedAndVulnerableDependencies
         env:
           VARVE_DEMO_STEPS: "1"
+          # compose.yaml's importer image, overridden with this run's push, by digest.
+          VARVE_DEMO_IMPORTER_IMAGE: ${{ env.IMPORTER }}:${{ steps.image.outputs.tag }}@${{ steps.image.outputs.digest }}
           VARVE_DEMO_COMPOSE_FILES: compose.yaml;${{ runner.temp }}/compose.ci.yaml
           VARVE_DEMO_SNAPSHOT_DIR: ${{ runner.temp }}/snapshot
           VARVE_DEMO_TOOL: ${{ github.workspace }}/artifacts/tool-bin/varve-demo
@@ -175,6 +176,8 @@ jobs:
 
       - name: The stack's logs
         if: ${{ always() }}
+        env:
+          VARVE_DEMO_IMPORTER_IMAGE: ${{ env.IMPORTER }}:${{ steps.image.outputs.tag }}@${{ steps.image.outputs.digest }}
         run: docker compose -f compose.yaml -f "$RUNNER_TEMP/compose.ci.yaml" logs --no-color > "$RUNNER_TEMP/results/compose.log" 2>&1 || true
 
       - name: Measurements summary
