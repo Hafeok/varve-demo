@@ -35,10 +35,6 @@ decisions:
     statement: "K is VarveDemo:Checkpoints:EveryCommits, proposed at 5000, and the importer refuses to start unless it is below the maxAsOfDistance the server advertises"
     accepted-by: mailto:emil@okkels-klein.dk
     accepted-at: 2026-10-26T11:49:23Z
-  - key: ImporterTakesCheckpointsAsOperator
-    statement: "The importer takes the checkpoints with POST /manage/datasets/name/checkpoints through the operator client, Varve's documented operator procedure, and S3's screen says the importer takes them and why"
-    accepted-by: mailto:emil@okkels-klein.dk
-    accepted-at: 2026-10-26T11:49:23Z
   - key: ServerCheckpointPolicyIsAVarveIssue
     statement: "A checkpoint policy configurable on the server stays a Varve issue, and when Varve ships it the importer stops calling the checkpoint endpoint and the server is configured instead"
     accepted-by: mailto:emil@okkels-klein.dk
@@ -47,8 +43,12 @@ decisions:
     statement: "As-of by a declared domain clock is filed as a Varve issue, and the index goes if Varve ships it"
     accepted-by: mailto:emil@okkels-klein.dk
     accepted-at: 2026-10-26T11:49:23Z
+  - key: ImporterTakesCheckpointsAsDatasetAdmin
+    statement: "The importer takes the checkpoints with POST /manage/datasets/name/checkpoints through varve-demo-checkpointer, which holds admin on the dataset alone, and S3's screen says the importer takes them and why"
 ---
 
 The rulings of [ADR 0004](../adr/0004-the-time-travel-clock.md), filed by session 01 of #1 on
 2026-10-23 and accepted by the maintainer on 2026-10-26, on the foundation's
-pull request #2. Every ruling carries `accepted-by` and `accepted-at`.
+pull request #2. Every ruling filed then carries `accepted-by` and `accepted-at`.
+
+**Superseded on 2026-11-03** by `ImporterTakesCheckpointsAsDatasetAdmin`, filed unaccepted by session 03 on #5 (ADR 0004's and ADR 0007's amendments of 2026-11-03): `ImporterTakesCheckpointsAsOperator`, "The importer takes the checkpoints with POST /manage/datasets/name/checkpoints through the operator client, Varve's documented operator procedure, and S3's screen says the importer takes them and why", accepted by mailto:emil@okkels-klein.dk at 2026-10-26T11:49:23Z. Keys are never reused.

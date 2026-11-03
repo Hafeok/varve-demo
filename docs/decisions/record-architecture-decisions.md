@@ -31,7 +31,7 @@ decisions:
 
 The rulings of [ADR 0001](../adr/0001-record-architecture-decisions.md), filed by session 01 of #1 on
 2026-10-23 and accepted by the maintainer on 2026-10-26, on the foundation's
-pull request #2. Every ruling carries `accepted-by` and `accepted-at`.
+pull request #2. Every ruling filed then carries `accepted-by` and `accepted-at`.
 
 `AcceptanceTranscribedOnlyOnInstruction` is the 2026-11-03 amendment's
 ruling, filed unaccepted by session 03 on #3.

@@ -191,3 +191,10 @@ Its ruling `ImporterTakesCheckpointsAsOperator` is accepted, and this
 narrows who "the operator" is to a dataset admin. If the maintainer reads
 that as a change of meaning rather than a refinement, ADR 0001 point 4 asks
 for a superseding ADR instead, and this amendment becomes its draft.
+
+**Keys (added 2026-11-03, at the maintainer's ruling).** An accepted key
+never changes meaning. `OperatorClientIsABootstrapOperator` said the operator
+covers the checkpoints. It is superseded by `OperatorOnlyCreatesTheDataset`,
+and the checkpoints are `CheckpointsByADatasetAdminClient`; both are filed
+unaccepted. The old key leaves the set, and its text is kept in the set's
+notes.

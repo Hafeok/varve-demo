@@ -15,10 +15,6 @@ decisions:
     statement: "deploy/mock-oauth2.json holds one client-credentials client per role: importer writes, viewer reads, operator applies declarations and grants"
     accepted-by: mailto:emil@okkels-klein.dk
     accepted-at: 2026-10-26T11:49:23Z
-  - key: OperatorClientIsABootstrapOperator
-    statement: "The operator client is a bootstrap operator on the management audience, which gives it server-admin to create the dataset and admin on it for the checkpoints and status the importer reads"
-    accepted-by: mailto:emil@okkels-klein.dk
-    accepted-at: 2026-10-26T11:49:23Z
   - key: EveryWriteCarriesItsAgent
     statement: "Every write in the log carries a real agent, the subject of the token that made it, and no write path that records no agent is used"
     accepted-by: mailto:emil@okkels-klein.dk
@@ -29,6 +25,8 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: CheckpointsByADatasetAdminClient
     statement: "Checkpoints are taken by varve-demo-checkpointer, which holds admin on the dataset alone with management-audience tokens; the bootstrap operator is used only by a one-shot setup service"
+  - key: OperatorOnlyCreatesTheDataset
+    statement: "The operator client is a bootstrap operator on the management audience, used once by a one-shot setup service to apply the dataset and its grants, and by no long-running service"
 ---
 
 The rulings of [ADR 0007](../adr/0007-local-authentication-with-a-mock-oidc-issuer.md), filed by session 01 of #1 on
@@ -37,3 +35,5 @@ pull request #2. Every ruling filed then carries `accepted-by` and `accepted-at`
 
 `CheckpointsByADatasetAdminClient` is the 2026-11-03 amendment's ruling, filed
 unaccepted by session 03 on #5.
+
+**Superseded on 2026-11-03** by `OperatorOnlyCreatesTheDataset`, filed unaccepted by session 03 on #5 (ADR 0007's amendment of 2026-11-03): `OperatorClientIsABootstrapOperator`, "The operator client is a bootstrap operator on the management audience, which gives it server-admin to create the dataset and admin on it for the checkpoints and status the importer reads", accepted by mailto:emil@okkels-klein.dk at 2026-10-26T11:49:23Z. Keys are never reused.

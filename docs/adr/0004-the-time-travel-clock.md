@@ -269,3 +269,27 @@ K against `maxAsOfDistance` at start, and takes the final checkpoint. The
 live tail in slice 2. The hand-off prompt for slice 1a asked for a
 checkpoint every K commits during the import; this ADR's point 6 and its
 alternative 8 reject that, and the importer follows the ADR.
+
+## Amendment, 2026-11-03: the base, and the superseded checkpoint ruling
+
+Filed unaccepted by session 03, on #5, at the maintainer's rulings.
+
+1. **The ruling for point 7 changes key.** `ImporterTakesCheckpointsAsOperator`
+   is superseded by `ImporterTakesCheckpointsAsDatasetAdmin`, filed unaccepted:
+   the same route, through `varve-demo-checkpointer`, which holds `admin` on
+   the dataset alone. A key never changes meaning; the old one leaves the set,
+   and its text is kept in the set's notes.
+2. **The base sits at the window's lower bound T0** (ADR 0008's amendment of
+   2026-11-03). The import loads the catalog's state of the N packages as of
+   T0 first, one commit per package. Each base commit asserts, in
+   `<urn:varve-demo:catalog-log>`, a node
+   `<urn:varve-demo:base:{id}>` with `vd:basePackage` and `vd:baseAsOf` T0
+   (ADR 0010's amendment). Point 4's time index reads `vd:baseAsOf` as those
+   positions' catalog time, so every base position resolves to T0, and
+   catalog time T0 resolves to the last base position.
+3. **S3's slider starts at T0**, and its screen says the base is the
+   catalog's state as of T0 and that history before T0 is not replayed. A
+   viewer who wants it runs `varve-demo import --since <date>`.
+
+Point 6's checkpoint rule is unchanged, as the maintainer ruled: no
+checkpoints during the import, one at its end.
