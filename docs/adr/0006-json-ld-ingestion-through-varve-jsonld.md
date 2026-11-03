@@ -65,3 +65,31 @@ importer decides what to send.
 - The snapshot carries the context documents, and its manifest hashes them.
 - A JSON-LD bug in Varve stops the demo's import until a release fixes it,
   which is the brief's intent: the gap is shown, with its issue.
+
+## Amendment, 2026-11-03: every context is inline, and a remote one fails
+
+Filed unaccepted by session 03, on #5 (slice 1a), at the maintainer's ruling.
+
+**What the catalog does.** Point 2 expected leaves to name remote `@context`
+documents. They do not. Every leaf read in slice 1a carries its context inline,
+as a JSON object: the 30 406 leaves fetched while finding the window, and
+every leaf of the snapshot, base and window. Four distinct inline contexts
+occur; the manifest lists them by hash.
+
+**So point 2 becomes:**
+
+1. The snapshot records no context documents. It keeps each leaf's inline
+   context with the leaf.
+2. The importer's `JsonLdOptions.DocumentLoader` refuses every remote context,
+   as `Varve.JsonLd`'s default does. A leaf naming a remote context fails
+   loudly; it is never fetched:
+   - at build, the snapshot builder refuses a leaf whose context is not an
+     inline object, and names it;
+   - at import, `Varve.JsonLd` refuses it through the loader, and the import
+     stops and names the leaf (point 4).
+3. If the catalog ever starts naming remote contexts, that is a change to
+   this ADR, not a quiet fetch.
+
+Ruling `ContextsFromTheSnapshot` is superseded by `InlineContextsOnly`, filed
+unaccepted. Following Varve's rule that a key is never reused, the old key
+leaves the set, and its text is kept in the set's notes.
