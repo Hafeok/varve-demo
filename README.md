@@ -93,6 +93,9 @@ are ADRs ([index](docs/adr/README.md)), each with a decision set in
 - [0007 Local authentication with a mock OIDC issuer](docs/adr/0007-local-authentication-with-a-mock-oidc-issuer.md)
 - [0008 The dataset and its mapping](docs/adr/0008-the-dataset-and-its-mapping.md)
 - [0009 S4's subscription path](docs/adr/0009-s4s-subscription-path.md)
+- [0010 The graph model and vocabulary](docs/adr/0010-the-graph-model-and-vocabulary.md) (proposed)
+- [0011 Our container images](docs/adr/0011-our-container-images.md) (proposed)
+- [0012 The demo tool](docs/adr/0012-the-demo-tool.md) (proposed)
 
 How the work is done is in [AGENTS.md](AGENTS.md).
 
