@@ -51,7 +51,7 @@ public sealed record SnapshotDraft(
 /// <item><c>base.ndjson</c> and <c>base-leaves.ndjson</c>: per package, the latest leaf of each version before the lower bound;</item>
 /// <item><c>commits.ndjson</c> and <c>leaves.ndjson</c>: the retained catalog commits inside the window, in catalog order;</item>
 /// </list>
-/// every leaf as <see cref="LeafProjection"/> keeps it, one per line.
+/// one leaf per line: a base leaf as <see cref="LeafProjection"/> keeps it, a window leaf whole.
 /// </summary>
 public sealed class SnapshotBuilder
 {
@@ -163,6 +163,7 @@ public sealed class SnapshotBuilder
 
         List<BasePackage> basePackages = [.. latest
             .Where(static pair => !pair.Value.Leaf.IsDelete)
+            .Where(pair => inputs.BaseSample is not { } sample || sample.Takes(pair.Value.Leaf.Url, pair.Key.Id))
             .GroupBy(static pair => pair.Key.Id, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .Select(static group => new BasePackage(group.Key, [.. group.OrderBy(static pair => pair.Key.Version, StringComparer.Ordinal).Select(static pair => pair.Value.Leaf)]))];
@@ -195,7 +196,9 @@ public sealed class SnapshotBuilder
         _log.WriteLine("catalog: base " + basePackages.Count.ToString(CultureInfo.InvariantCulture) + " packages, " + baseLeaves.Length.ToString(CultureInfo.InvariantCulture)
             + " versions; window " + commits.Count.ToString(CultureInfo.InvariantCulture) + " commits, " + windowLeaves.Length.ToString(CultureInfo.InvariantCulture) + " leaves");
 
-        // Every leaf, fetched once, kept as its projection.
+        // Every leaf, fetched once: a base leaf kept as its projection, a window leaf whole.
+        HashSet<string> baseUrls = new(baseLeaves.Select(static leaf => leaf.Url), StringComparer.Ordinal);
+        HashSet<string> windowUrls = new(windowLeaves.Select(static leaf => leaf.Url), StringComparer.Ordinal);
         ConcurrentDictionary<string, byte[]> bodies = new(StringComparer.Ordinal);
         ConcurrentDictionary<string, long> inline = new(StringComparer.Ordinal);
         int fetched = 0;
@@ -210,9 +213,11 @@ public sealed class SnapshotBuilder
                 throw new InvalidDataException("The leaf at " + leaf.Url + " names itself " + at + ".");
             }
 
-            byte[] projected = LeafProjection.Project(document.RootElement, leaf.Url);
-            inline.AddOrUpdate(Sha256Text.Of(Minify(document.RootElement.GetProperty("@context"))), 1, static (_, count) => count + 1);
-            bodies[leaf.Url] = projected;
+            JsonElement context = LeafProjection.InlineContext(document.RootElement, leaf.Url);
+            inline.AddOrUpdate(Sha256Text.Of(Minify(context)), 1, static (_, count) => count + 1);
+            bodies[leaf.Url] = baseUrls.Contains(leaf.Url) && !windowUrls.Contains(leaf.Url)
+                ? LeafProjection.Project(document.RootElement, leaf.Url)
+                : Minify(document.RootElement);
             int done = Interlocked.Increment(ref fetched);
             if (done % 20000 == 0)
             {

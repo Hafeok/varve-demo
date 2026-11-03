@@ -53,7 +53,7 @@ public static class ManifestWriter
 
         SnapshotReader reader = SnapshotReader.OpenUnverified(directory, provisional with
         {
-            Base = inputs.Base ? new BaseCounts { Packages = 0, Versions = 0, DeletedBefore = 0, Quads = 0, Sha256 = string.Empty } : null,
+            Base = inputs.Base ? new BaseCounts { Packages = 0, Versions = 0, DeletedBefore = 0, Quads = 0, Sha256 = string.Empty, LeafRule = LeafProjection.Rule } : null,
         });
         BaseCounts? baseCounts = null;
         HashSet<string> present = new(StringComparer.Ordinal);
@@ -81,6 +81,8 @@ public static class ManifestWriter
                 DeletedBefore = draft.DeletedBeforeFrom,
                 Quads = baseQuads,
                 Sha256 = Sha256Text.Of(Encoding.UTF8.GetBytes(SnapshotManifest.HashList(files.Where(static f => SnapshotManifest.BaseFiles.Contains(f.Path))))),
+                LeafRule = LeafProjection.Rule,
+                Sample = inputs.BaseSample is { } sample ? sample.Percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + "% " + (sample.ByPackage ? "of packages" : "of versions") + ", seed " + sample.Seed : null,
             };
         }
 

@@ -250,6 +250,67 @@ public sealed partial class StepChecks
         Assert.All(report.Measurements, static m => Assert.True(m.Met, m.Name + " is " + m.Value.ToString(CultureInfo.InvariantCulture) + " " + m.Unit + "; the target is " + m.Target?.ToString(CultureInfo.InvariantCulture) + "."));
     }
 
+    /// <summary>
+    /// The import under a 512 MB limit on the server (the review's ruling 3):
+    /// a CI-only compose override, never the viewer's compose, sets
+    /// <c>mem_limit</c>; the tool imports the snapshot; the run records whether
+    /// it completed, the server's peak resident memory, and whether the
+    /// container was killed. Not a step of the script: evidence about the
+    /// server's memory, for the evidence page.
+    /// </summary>
+    [Fact]
+    public async Task ImportUnderAMemoryLimit()
+    {
+        Stack.RequireSteps();
+        string? limited = Environment.GetEnvironmentVariable("VARVE_DEMO_MEMORY_OVERRIDE");
+        Assert.SkipWhen(string.IsNullOrEmpty(limited), "VARVE_DEMO_MEMORY_OVERRIDE names no compose override with the server's memory limit; CI's steps job writes one.");
+        SnapshotManifest manifest = Stack.Manifest();
+        string files = Environment.GetEnvironmentVariable("VARVE_DEMO_COMPOSE_FILES") ?? "compose.yaml";
+        Environment.SetEnvironmentVariable("VARVE_DEMO_COMPOSE_FILES", files + ";" + limited);
+        try
+        {
+            await Stack.ComposeAsync("down --volumes", TimeSpan.FromMinutes(2));
+            ProcessResult up = await Stack.ComposeAsync("up --detach mock-oauth2 varve setup", TimeSpan.FromMinutes(2));
+            Assert.True(up.ExitCode == 0, up.Error);
+            ProcessResult limit = await Stack.RunAsync("docker", "inspect varve-demo-varve-1 --format {{.HostConfig.Memory}}", TimeSpan.FromSeconds(30));
+            long bytes = long.Parse(limit.Output.Trim(), CultureInfo.InvariantCulture);
+            Assert.True(bytes > 0, "The override set no memory limit.");
+
+            long peak = 0;
+            Task<ProcessResult> import = Stack.ToolAsync("import --snapshot " + Stack.SnapshotDirectory, TimeSpan.FromMinutes(20));
+            while (!import.IsCompleted)
+            {
+                try
+                {
+                    peak = Math.Max(peak, await Stack.ServerResidentKiBAsync());
+                }
+                catch (Xunit.Sdk.XunitException)
+                {
+                    // The container is restarting or gone: the inspect below says which.
+                }
+
+                await Task.WhenAny(import, Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken));
+            }
+
+            ProcessResult result = await import;
+            ProcessResult state = await Stack.RunAsync("docker", "inspect varve-demo-varve-1 --format {{.State.OOMKilled}}/{{.RestartCount}}", TimeSpan.FromSeconds(30));
+            new MeasurementReport("ImportUnderAMemoryLimit")
+                .Fact("snapshotSha256", manifest.Sha256)
+                .Fact("serverOomKilledAndRestarts", state.Output.Trim())
+                .Fact("importExit", result.ExitCode.ToString(CultureInfo.InvariantCulture))
+                .Add(new Measurement("serverMemoryLimitKiB", bytes / 1024, "KiB"))
+                .Add(new Measurement("serverResidentKiBPeak", peak, "KiB"))
+                .Add(new Measurement("importCompleted", result.ExitCode == 0 ? 1 : 0, "count", 1, "equal"))
+                .Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
+            Assert.True(result.ExitCode == 0, "The import under " + (bytes / 1048576).ToString(CultureInfo.InvariantCulture) + " MB did not complete (" + state.Output.Trim() + "):\n" + Stack.Indent(result.Output + result.Error));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("VARVE_DEMO_COMPOSE_FILES", files);
+            await Stack.ComposeAsync("down --volumes", TimeSpan.FromMinutes(2));
+        }
+    }
+
     /// <summary>Loads the snapshot through the tool when the stack is not already at S1's end.</summary>
     private static async Task EnsureLoadedAsync(SnapshotManifest manifest)
     {

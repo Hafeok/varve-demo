@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -108,7 +109,7 @@ public sealed class LeafRefusedException : Exception
 public static class CatalogUpdate
 {
     /// <summary>The mapping's version, part of the tool version a snapshot names.</summary>
-    public const string MappingVersion = "2";
+    public const string MappingVersion = "3";
 
     /// <summary>
     /// The base state of one package (ADR 0008's amendment): one graph per
@@ -216,7 +217,9 @@ public static class CatalogUpdate
             },
         };
 
-        long count = 0;
+        // Every quad of the leaf, as Varve.JsonLd produces it, before the model keeps any.
+        List<(string Subject, string Predicate, string Object)> all = [];
+        StringBuilder term = new(256);
         JsonLdResult result = JsonLdParser.Parse(leaf.Json, (in QuadView quad) =>
         {
             if (quad.HasGraph)
@@ -224,18 +227,27 @@ public static class CatalogUpdate
                 throw new LeafRefusedException("The leaf " + leaf.Ref.Url + " names a graph of its own; a catalog leaf is one default graph.");
             }
 
-            NTriplesTerms.Write(update, quad.Subject, blankPrefix);
-            update.Append(' ');
-            NTriplesTerms.Write(update, quad.Predicate, blankPrefix);
-            update.Append(' ');
-            NTriplesTerms.Write(update, quad.Object, blankPrefix);
-            update.Append(" .\n");
-            count++;
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Subject, blankPrefix);
+            string subject = term.ToString();
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Predicate, blankPrefix);
+            string predicate = term.ToString();
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Object, blankPrefix);
+            all.Add((subject, predicate, term.ToString()));
         }, options);
 
         if (!result.Succeeded)
         {
             throw new LeafRefusedException("Varve.JsonLd refused the leaf " + leaf.Ref.Url + ": " + result.Error);
+        }
+
+        long count = 0;
+        foreach ((string subject, string predicate, string obj) in AdvisoryModel.Keep(all, "<" + leaf.Ref.Url + ">"))
+        {
+            update.Append(subject).Append(' ').Append(predicate).Append(' ').Append(obj).Append(" .\n");
+            count++;
         }
 
         // The version key, on the leaf's own node (ADR 0010 point 5).

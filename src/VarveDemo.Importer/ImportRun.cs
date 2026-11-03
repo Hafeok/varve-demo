@@ -22,6 +22,13 @@ public sealed record ImportSettings
     /// <summary><c>VarveDemo:Checkpoints:EveryCommits</c>, K of ADR 0004 point 6.</summary>
     public required long CheckpointEveryCommits { get; init; }
 
+    /// <summary>
+    /// <c>VarveDemo:Checkpoints:ForMemoryEveryCommits</c>: a checkpoint after
+    /// every this many commits during the import, to bound the server's memory,
+    /// not for as-of reads; 0, the default, takes none (ADR 0004 point 6).
+    /// </summary>
+    public long MemoryCheckpointEveryCommits { get; init; }
+
     /// <summary>How long to wait for the dataset to be ready.</summary>
     public TimeSpan ReadyTimeout { get; init; } = TimeSpan.FromMinutes(3);
 
@@ -176,6 +183,7 @@ public sealed class ImportRun
                 last = await SendAsync(client, update, "the base of " + package.Id + " (" + package.Sequence.ToString(CultureInfo.InvariantCulture) + " of the base)", last, cancellationToken).ConfigureAwait(false);
                 baseCommits++;
                 baseQuads += update.Quads;
+                await MemoryCheckpointAsync(admin, baseCommits, last, cancellationToken).ConfigureAwait(false);
                 if (baseClock.Elapsed >= nextBaseProgress)
                 {
                     await Progress("base", "packages", baseCommits, baseCounts.Packages, baseQuads, baseClock.Elapsed, last).ConfigureAwait(false);
@@ -208,6 +216,7 @@ public sealed class ImportRun
                 + " of the snapshot, first leaf " + commit.Leaves[0].Ref.Url + ")", last, cancellationToken).ConfigureAwait(false);
             quads += update.Quads;
             acknowledged.Add(new Acknowledged(commit.Sequence, commit.Commit.CommitId, last));
+            await MemoryCheckpointAsync(admin, baseCommits + acknowledged.Count, last, cancellationToken).ConfigureAwait(false);
 
             if (clock.Elapsed >= nextProgress)
             {
@@ -291,6 +300,23 @@ public sealed class ImportRun
         double seconds = Math.Max(elapsed.TotalSeconds, 1e-9);
         return _out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture,
             $"{phase}: {commits}/{total} {unit}, {quads} quads, {elapsed.TotalSeconds:0.000} s, {commits / seconds:0.0} commits/s, {quads / seconds:0.0} quads/s, position {position}"));
+    }
+
+    private async Task MemoryCheckpointAsync(SparqlHttpClient admin, long commits, long position, CancellationToken cancellationToken)
+    {
+        if (_settings.MemoryCheckpointEveryCommits <= 0 || commits % _settings.MemoryCheckpointEveryCommits != 0)
+        {
+            return;
+        }
+
+        using HttpResponseMessage response = await admin.CheckpointAsync(null, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ImportRefusedException("Varve refused a checkpoint for memory at position " + position.ToString(CultureInfo.InvariantCulture) + ": "
+                + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + " " + await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        }
+
+        await _out.WriteLineAsync("checkpoint (memory): at position " + position.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
     }
 
     private static CatalogUpdateText Mapped(Func<CatalogUpdateText> map, string what)

@@ -31,6 +31,12 @@ public sealed record BaseCounts
 
     /// <summary>The hash over the base's files, as <see cref="SnapshotManifest.HashList"/> takes it.</summary>
     public required string Sha256 { get; init; }
+
+    /// <summary>What the base's files keep of each leaf (<see cref="LeafProjection.Rule"/>).</summary>
+    public required string LeafRule { get; init; }
+
+    /// <summary>For a projection only: the sample taken, as "percent% seed s"; null for the whole base.</summary>
+    public string? Sample { get; init; }
 }
 
 /// <summary>The window's counts a snapshot's manifest states (ADR 0008).</summary>
@@ -201,6 +207,12 @@ public sealed record SnapshotManifest
                 json.WriteNumber("deletedBefore", baseCounts.DeletedBefore);
                 json.WriteNumber("quads", baseCounts.Quads);
                 json.WriteString("sha256", baseCounts.Sha256);
+                json.WriteString("leafRule", baseCounts.LeafRule);
+                if (baseCounts.Sample is { } sample)
+                {
+                    json.WriteString("sample", sample);
+                }
+
                 json.WriteEndObject();
             }
 
@@ -280,6 +292,8 @@ public sealed record SnapshotManifest
                     DeletedBefore = b.GetProperty("deletedBefore").GetInt64(),
                     Quads = b.GetProperty("quads").GetInt64(),
                     Sha256 = Text(b, "sha256"),
+                    LeafRule = Text(b, "leafRule"),
+                    Sample = b.TryGetProperty("sample", out JsonElement sample) ? sample.GetString() : null,
                 }
                 : null,
             InlineContexts = [.. contexts.GetProperty("inline").EnumerateArray().Select(static c => new InlineContext(Text(c, "sha256"), c.GetProperty("leaves").GetInt64()))],

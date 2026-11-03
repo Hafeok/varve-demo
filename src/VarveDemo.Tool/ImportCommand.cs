@@ -15,9 +15,18 @@ namespace VarveDemo.Tool;
 /// <summary><c>varve-demo import</c>: S1's load, then its first answer.</summary>
 internal static class ImportCommand
 {
+    /// <summary>A snapshot verified against a manifest other than the pinned one, for a measurement; said so on screen.</summary>
+    private static async Task<SnapshotReader> UnpinnedAsync(string directory, string manifestPath, CancellationToken cancellationToken)
+    {
+        SnapshotManifest manifest = SnapshotManifest.Read(await System.IO.File.ReadAllBytesAsync(manifestPath, cancellationToken).ConfigureAwait(false));
+        await Console.Out.WriteLineAsync("snapshot: " + directory + ", sha256 " + manifest.Sha256 + " (NOT the pinned snapshot: verified against " + manifestPath + ")").ConfigureAwait(false);
+        return await SnapshotReader.OpenAsync(directory, manifest, cancellationToken).ConfigureAwait(false);
+    }
+
     public static async Task<int> RunAsync(Arguments arguments, CancellationToken cancellationToken)
     {
         string? since = arguments.Optional("since");
+        string? unpinned = arguments.Optional("manifest");
         string? source = since is null ? arguments.Required("snapshot") : null;
         string cache = arguments.OrDefault("cache", ".data/snapshots");
         string? results = arguments.Optional("results");
@@ -27,12 +36,17 @@ internal static class ImportCommand
         using Connection connection = new(arguments);
         using ClientCredentials importer = connection.Client("importer");
         using ClientCredentials checkpointer = connection.Client("checkpointer");
+        long kMemory = arguments.Long("checkpoints-for-memory-every-commits", Environment.GetEnvironmentVariable("VarveDemo__Checkpoints__ForMemoryEveryCommits") is { Length: > 0 } memoryConfig
+            ? long.Parse(memoryConfig, CultureInfo.InvariantCulture)
+            : 0);
         arguments.RefuseUnknown();
 
-        SnapshotReader snapshot = since is null
-            ? await PinnedSnapshot.OpenAsync(source!, cache, Console.Out, cancellationToken).ConfigureAwait(false)
-            : await DeepHistory.BuildAsync(SnapshotInputs.Timestamp(since), cache, Console.Out, cancellationToken).ConfigureAwait(false);
-        ImportRun run = new(connection.Server, importer, checkpointer, new ImportSettings { CheckpointEveryCommits = k }, Console.Out);
+        SnapshotReader snapshot = since is not null
+            ? await DeepHistory.BuildAsync(SnapshotInputs.Timestamp(since), cache, Console.Out, cancellationToken).ConfigureAwait(false)
+            : unpinned is not null
+                ? await UnpinnedAsync(source!, unpinned, cancellationToken).ConfigureAwait(false)
+                : await PinnedSnapshot.OpenAsync(source!, cache, Console.Out, cancellationToken).ConfigureAwait(false);
+        ImportRun run = new(connection.Server, importer, checkpointer, new ImportSettings { CheckpointEveryCommits = k, MemoryCheckpointEveryCommits = kMemory }, Console.Out);
         ImportResult result = await run.RunAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         // S1's first answer, as the importer, which may read what it wrote.

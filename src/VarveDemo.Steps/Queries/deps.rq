@@ -22,7 +22,9 @@ WHERE {
     WHERE {
       VALUES (?lockId ?lockVersion ?g ?package) { }
       OPTIONAL {
-        GRAPH ?g { ?leaf vd:versionKey ?key ; nuget:isPrerelease ?prerelease . }
+        GRAPH ?g { ?leaf vd:versionKey ?key . }
+        # The key has a "-" exactly when the version is a prerelease (ADR 0010).
+        BIND (CONTAINS(?key, "-") AS ?prerelease)
         OPTIONAL {
           GRAPH ?g {
             ?leaf nuget:deprecation ?deprecation .
@@ -55,9 +57,9 @@ WHERE {
         GRAPH ?candidate {
           ?candidateLeaf vd:versionKey ?candidateKey ;
             nuget:version ?candidateVersion ;
-            nuget:listed true ;
-            nuget:isPrerelease ?candidatePrerelease .
+            nuget:listed true .
         }
+        BIND (CONTAINS(?candidateKey, "-") AS ?candidatePrerelease)
         FILTER (STRSTARTS(STR(?candidate), ?package))
         FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:vulnerability ?any . } }
         FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:deprecation ?some . } }
