@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The steps' checks (S1_ZeroToQuery, S2_DeprecatedAndVulnerableDependencies)
+    and the tests of what they rest on. The step checks drive docker compose
+    and the installed varve-demo tool; they run in CI's steps job, which sets
+    VARVE_DEMO_STEPS=1, and are skipped with that reason anywhere else.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="NuGet.Versioning" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../VarveDemo.Oracle/VarveDemo.Oracle.csproj" />
+    <ProjectReference Include="../../src/VarveDemo.Steps/VarveDemo.Steps.csproj" />
+  </ItemGroup>
+
+</Project>
