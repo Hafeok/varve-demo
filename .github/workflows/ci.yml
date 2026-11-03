@@ -10,6 +10,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The weekly rebuild of the snapshot from nuget.org (ADR 0008's amendment).
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -57,7 +61,7 @@ jobs:
   steps:
     name: steps (S1, S2)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     permissions:
       contents: read
       # The importer image, pushed as pr-<sha> or main-<sha> (ADR 0011).
@@ -72,6 +76,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -84,13 +90,58 @@ jobs:
           mkdir -p "$RUNNER_TEMP/results"
           chmod 777 "$RUNNER_TEMP/results"
 
-      # ADR 0008: the committed manifest is a claim that the snapshot rebuilds
-      # from nuget.org byte for byte. This makes it a test.
+      # ADR 0008's amendment: the snapshot is rebuilt from nuget.org when what
+      # it is a function of changes (snapshot/, the builder, the mapping), every
+      # week, and on demand; a rebuild that differs from the committed manifest
+      # fails the run. Otherwise the published asset is downloaded and verified
+      # by hash, and cached by that hash.
+      - name: Decide whether to rebuild the snapshot
+        id: mode
+        run: |
+          sha="$(python3 -c "import json; print(json.load(open('snapshot/manifest.json'))['sha256'])")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=snapshot-${sha:0:12}" >> "$GITHUB_OUTPUT"
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) rebuild=true ;;
+            pull_request) base="${{ github.event.pull_request.base.sha }}" ;;
+            *) base="${{ github.event.before }}" ;;
+          esac
+          if [ -z "${rebuild:-}" ]; then
+            if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+              rebuild=true
+            elif git diff --name-only "$base" HEAD | grep -qE '^(snapshot/|src/VarveDemo\.Snapshot/|src/VarveDemo\.Importer/)'; then
+              rebuild=true
+            else
+              rebuild=false
+            fi
+          fi
+          echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
+          echo "snapshot $sha: rebuild=$rebuild" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Rebuild the snapshot from nuget.org and compare
+        if: ${{ steps.mode.outputs.rebuild == 'true' }}
         run: >-
           dotnet run --project src/VarveDemo.Tool -c Release --no-build --
           snapshot build --inputs snapshot --out "$RUNNER_TEMP/snapshot"
           --check snapshot/manifest.json
+
+      - name: Restore the published snapshot from the cache
+        if: ${{ steps.mode.outputs.rebuild != 'true' }}
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/snapshot
+          key: snapshot-${{ steps.mode.outputs.sha }}
+
+      - name: Download the published snapshot and verify it by hash
+        if: ${{ steps.mode.outputs.rebuild != 'true' }}
+        run: |
+          if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then
+            gh release download "${{ steps.mode.outputs.tag }}" --pattern snapshot.tar.gz --dir "$RUNNER_TEMP"
+            mkdir -p "$RUNNER_TEMP/snapshot"
+            tar -xzf "$RUNNER_TEMP/snapshot.tar.gz" -C "$RUNNER_TEMP/snapshot"
+          fi
+          dotnet run --project src/VarveDemo.Tool -c Release --no-build -- snapshot verify --snapshot "$RUNNER_TEMP/snapshot" --manifest snapshot/manifest.json
 
       - name: The version key agrees with NuGet.Versioning on every version
         env:
@@ -160,8 +211,10 @@ jobs:
                 - $RUNNER_TEMP/results:/results
           EOF
           cat "$RUNNER_TEMP/compose.ci.yaml"
+          # CI only: the server held to 512 MB, for ImportUnderAMemoryLimit.
+          printf 'services:\n  varve:\n    mem_limit: 512m\n    memswap_limit: 512m\n' > "$RUNNER_TEMP/compose.memory.yaml"
 
-      - name: S1_ZeroToQuery and S2_DeprecatedAndVulnerableDependencies
+      - name: S1_ZeroToQuery, S2_DeprecatedAndVulnerableDependencies, and the import under 512 MB
         env:
           VARVE_DEMO_STEPS: "1"
           # compose.yaml's importer image, overridden with this run's push, by digest.
@@ -170,9 +223,10 @@ jobs:
           VARVE_DEMO_SNAPSHOT_DIR: ${{ runner.temp }}/snapshot
           VARVE_DEMO_TOOL: ${{ github.workspace }}/artifacts/tool-bin/varve-demo
           VARVE_DEMO_RESULTS_DIR: ${{ runner.temp }}/results
+          VARVE_DEMO_MEMORY_OVERRIDE: ${{ runner.temp }}/compose.memory.yaml
         run: >-
           dotnet test --project tests/VarveDemo.Steps.Tests -c Release --no-build
-          --filter-method "*S1_ZeroToQuery" --filter-method "*S2_DeprecatedAndVulnerableDependencies"
+          --filter-method "*S1_ZeroToQuery" --filter-method "*S2_DeprecatedAndVulnerableDependencies" --filter-method "*ImportUnderAMemoryLimit"
           --report-trx --results-directory "${{ github.workspace }}/TestResults"
 
       - name: The stack's logs
