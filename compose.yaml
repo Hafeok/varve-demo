@@ -87,7 +87,7 @@ services:
       VARVE_DEMO_ISSUER: http://mock-oauth2:8080/varve-demo
       # The pinned snapshot, a release asset; verified against the manifest
       # the importer carries before a byte of it is used (ADR 0008).
-      VARVE_DEMO_SNAPSHOT: https://github.com/Hafeok/varve-demo/releases/download/snapshot-1eb32c8560f8/snapshot.tar.gz
+      VARVE_DEMO_SNAPSHOT: https://github.com/Hafeok/varve-demo/releases/download/snapshot-edb36caaa27f/snapshot.tar.gz
       VarveDemo__Checkpoints__EveryCommits: "5000"
     volumes:
       - importer-cache:/var/lib/varve-demo

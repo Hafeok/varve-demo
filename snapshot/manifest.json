@@ -1,7 +1,7 @@
 {
-  "format": 1,
-  "tool": "varve-demo 0.1.0 (mapping 1)",
-  "sha256": "1eb32c8560f871f4dc2a5aeff28e9821bde9e88d8dc11c3967f9564e7355f034",
+  "format": 2,
+  "tool": "varve-demo 0.1.0 (mapping 4)",
+  "sha256": "edb36caaa27f45b517f6977987bb7e9f1202e72f5e567085db24deb39275dc9e",
   "n": 3000,
   "idsSha256": "3c385817bb1e3d18a6ca693993a62c88867404901d54da59d63db24fb1316203",
   "window": {
@@ -10,7 +10,7 @@
   },
   "catalog": {
     "index": "https://api.nuget.org/v3/catalog0/index.json",
-    "firstPage": 23351,
+    "firstPage": 0,
     "lastPage": 23456,
     "firstCommit": "8e0a5187-8dd5-4027-874b-f408e41eb814",
     "lastCommit": "7b6e15ff-c57d-4380-b3b7-42eeb22ffca2"
@@ -23,23 +23,49 @@
     "deleteLeaves": 3,
     "packages": 884,
     "versions": 4644,
-    "versionsPresent": 4644,
-    "quads": 1753337
+    "versionsPresent": 515772,
+    "quads": 36128
+  },
+  "base": {
+    "asOf": "2026-10-20T00:00:00.0000000Z",
+    "packages": 3000,
+    "versions": 512390,
+    "deletedBefore": 46,
+    "quads": 3018866,
+    "sha256": "78042ec887621cae60d2b42cf5d13ceca969e9c06c09eb70b56255deaa0ef239",
+    "leafRule": "base leaves keep @context, @id, id, version, listed, deprecation, vulnerabilities; window leaves are whole"
   },
   "contexts": {
-    "remote": [],
     "inline": [
       {
         "sha256": "08234e3797d1dea942c8af3672534c9cf8be12fbc03102387574270ff2c9b810",
-        "leaves": 5252
+        "leaves": 390330
       },
       {
-        "sha256": "d733d100f0bbc6fedea1b67f8203f8e91383f740c0086dd7825307fc51c974f0",
-        "leaves": 3
+        "sha256": "92d53e00f5e86e850e2927481307a8ba3dc858d4f1df42805032dff85c3dc44d",
+        "leaves": 86320
+      },
+      {
+        "sha256": "b13fe421867da4650a8aa998754a28a2df582d2f593b8dc0bc2b4575bd0d6d60",
+        "leaves": 17027
+      },
+      {
+        "sha256": "c6d7b6d6ef1b736e086c847414f7ff564faad87f9b2b8412fa95197c2f653373",
+        "leaves": 23965
       }
     ]
   },
   "files": [
+    {
+      "path": "base-leaves.ndjson",
+      "bytes": 495387563,
+      "sha256": "392e904d5727e0b3e8f4b75c310c86caf18567ca719fff9ce6cdeff40177f8fc"
+    },
+    {
+      "path": "base.ndjson",
+      "bytes": 95209129,
+      "sha256": "3423505715570c1dd1506f91a126671d321e9710200e8542f602a3cbfc2d8183"
+    },
     {
       "path": "commits.ndjson",
       "bytes": 1198836,
@@ -52,8 +78,8 @@
     },
     {
       "path": "leaves.ndjson",
-      "bytes": 100636101,
-      "sha256": "732da0041c955de8360d73c76e1cdb09d4c366dc8778b2cd6aa6c6a6a80363ee"
+      "bytes": 100633956,
+      "sha256": "f9f7e70f03b660153169ba1ddf35b7c1454014f97cf457a9c255dd5e9267be8a"
     }
   ]
 }
