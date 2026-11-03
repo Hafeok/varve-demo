@@ -1,0 +1,10 @@
+# S1's first answer: the catalog commits the dataset holds, one per retained
+# catalog commit of the snapshot (ADRs 0004, 0010). The manifest predicts it.
+PREFIX catalog: <http://schema.nuget.org/catalog#>
+
+SELECT (COUNT(?commit) AS ?catalogCommits)
+WHERE {
+  GRAPH <urn:varve-demo:catalog-log> {
+    ?commit catalog:commitId ?commitId .
+  }
+}
