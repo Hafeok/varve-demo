@@ -125,3 +125,60 @@ SPARQL can compare.
   the quads, and so the tool version in the manifest.
 - `NuGet.Versioning` enters as a test-only package, and the gate that the
   oracle references no Varve assembly also keeps it out of the importer.
+
+## Amendment, 2026-11-03: the store holds the catalog's advisory state
+
+Filed unaccepted by session 03, on #5, at the maintainer's ruling, when the
+base (ADR 0008's amendment) made the whole-leaf model too large. The whole-leaf
+model gave the window about 377 quads per version, mostly dependency groups
+and package entries.
+512 390 base versions are about 190 million quads, about 80 minutes at the
+measured rate.
+
+**One graph model, for base and window alike.** Every leaf is still read in
+full by `Varve.JsonLd`, with its own context (point 1). Of the quads it
+produces, the importer keeps these, and only these
+(`src/VarveDemo.Importer/AdvisoryModel.cs`):
+
+| Node | Kept |
+|---|---|
+| the leaf (the version) | `nuget:id`, `nuget:version`, `nuget:listed`, `nuget:deprecation`, `nuget:vulnerability` |
+| its deprecation | `nuget:reasons`, `nuget:alternatePackage` |
+| the alternate package | `nuget:id`, `nuget:range` |
+| each vulnerability | `nuget:advisoryUrl`, `nuget:severity` |
+
+The importer adds the version key (point 5). **Everything else is dropped**:
+dependency groups and their dependencies, package entries, `rdf:type`,
+`isPrerelease` (the version key says it), descriptions, summaries, authors,
+owners, tags, icons, URLs, licences, release notes, sizes, hashes,
+`published`, `created`, `lastEdited`, and the leaf's own `catalog:commitId`
+and `catalog:commitTimeStamp`.
+
+**What this means.** The store holds the catalog's **advisory state** of each
+version, not the whole catalog: what S2 to S4 read, in the catalog's own
+terms. Point 1 still holds for what is kept: no term is renamed, and nothing
+of ours replaces a catalog term. A viewer who wants a dropped property reads
+the leaf, whose URL is the version's node.
+
+**The snapshot's base files** hold each base leaf pruned to the members this
+model reads, by the rule the manifest records (`base.leafRule`): `@context`,
+`@id`, `id`, `version`, `listed`, `deprecation`, `vulnerabilities`. Window
+leaves stay whole. Either way the importer reads the leaf with
+`Varve.JsonLd` and keeps the quads above, so a pruned leaf and a whole one of
+the same version give the same quads.
+
+**The oracle reads the same fields**, from the snapshot's JSON: `id`,
+`version`, `listed`, `deprecation` (`reasons`, `alternatePackage.id`,
+`alternatePackage.range`) and `vulnerabilities` (`advisoryUrl`,
+`severity`). It takes prerelease from `NuGet.Versioning`, and the query
+takes it from the version key.
+
+**The base in the catalog log.** Each base commit asserts
+`<urn:varve-demo:base:{id}>` in `<urn:varve-demo:catalog-log>`, with
+`<urn:varve-demo:term:basePackage>` (the id) and
+`<urn:varve-demo:term:baseAsOf>` (T0 as `xsd:dateTime`). These are two more
+derived terms in point 3's namespace.
+
+Its rulings are `LeafProjectedToWhatTheStepsRead` and
+`BaseStateInTheCatalogLog`, filed unaccepted. The first is restated below to
+match this text.

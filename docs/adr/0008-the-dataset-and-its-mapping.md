@@ -168,31 +168,3 @@ since one advisory reflow rewrote hundreds of large SixLabors.ImageSharp
 leaves several times. At the same rate that is about six minutes, over S1's
 budget.
 
-**The lower bound proposed: 2026-10-20T00:00:00Z; the upper bound, the
-snapshot date, 2026-11-03T00:00:00Z** (`snapshot/inputs.json`). The window
-holds S2's and S3's story:
-
-- **S3**: advisory `GHSA-v76p-62qx-wwq2` is added to SixLabors.ImageSharp
-  3.0.0, 3.0.1, 3.0.2 and 15 other versions at
-  `2026-10-26T16:04:33.9723859Z`, after earlier leaves of the same versions
-  inside the window. So an as-of answer before and after it differs.
-- **S2**: at the window's end, 26 deprecated versions (MySqlConnector,
-  StackExchange.Redis, Respite, AutoMapper) and 343 vulnerable ones
-  (MySqlConnector, SixLabors.ImageSharp).
-
-**What the window leaves out, said plainly.** A package version enters the
-dataset only if the catalog wrote a leaf for it inside the window. The window
-holds 884 of the 3 000 packages and 4 644 versions. A lock file naming a
-version with no leaf inside the window gets "outside the subset" for it, not
-a false "clean". The README says where history begins and why.
-
-**This departs from point 2's wording**, which puts the lower bound where the
-catalog starts carrying deprecation and vulnerability data. That bound
-(2019-09-23, or 2020-07-17 for both) is recorded above. Point 6 makes the
-window the knob, and that bound cannot meet S1's target. The choice is the
-maintainer's:
-
-1. accept the two-week window, which keeps S1's 3 minutes;
-2. keep the bound from point 2 and move S1's target to hours; or
-3. accept the two-week window for S1 and add, by a later ADR, a long-history
-   snapshot for S3 alone, imported once and cloned (S7's route).

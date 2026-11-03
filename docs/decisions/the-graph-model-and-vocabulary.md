@@ -18,7 +18,7 @@ decisions:
   - key: NoOtherDerivedData
     statement: "Deprecation, vulnerability, listing and prerelease status are read by queries from the catalog's own terms, never from a derived flag"
   - key: LeafProjectedToWhatTheStepsRead
-    statement: "The snapshot keeps of each leaf its inline context, its @id and the members id, version, listed, isPrerelease, deprecation and vulnerabilities, and the importer and the oracle both read that projection"
+    statement: "Every leaf is read whole by Varve.JsonLd and the store keeps only the catalog's advisory state: id, version, listed, deprecation with reasons and alternate package and range, vulnerabilities with advisory URL and severity, and the version key; base leaves may be stored pruned to those members by the rule the manifest records, and the oracle reads the same fields"
   - key: BaseStateInTheCatalogLog
     statement: "Each base commit asserts urn:varve-demo:base:id in urn:varve-demo:catalog-log with vd:basePackage and vd:baseAsOf T0, so the time index places the base at T0"
 ---
