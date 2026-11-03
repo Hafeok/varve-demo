@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "tool": "varve-demo 0.1.0 (mapping 1)",
+  "sha256": "1eb32c8560f871f4dc2a5aeff28e9821bde9e88d8dc11c3967f9564e7355f034",
+  "n": 3000,
+  "idsSha256": "3c385817bb1e3d18a6ca693993a62c88867404901d54da59d63db24fb1316203",
+  "window": {
+    "from": "2026-10-20T00:00:00.0000000Z",
+    "to": "2026-11-03T00:00:00.0000000Z"
+  },
+  "catalog": {
+    "index": "https://api.nuget.org/v3/catalog0/index.json",
+    "firstPage": 23351,
+    "lastPage": 23456,
+    "firstCommit": "8e0a5187-8dd5-4027-874b-f408e41eb814",
+    "lastCommit": "7b6e15ff-c57d-4380-b3b7-42eeb22ffca2"
+  },
+  "counts": {
+    "catalogCommitsRetained": 1731,
+    "catalogCommitsSkipped": 27138,
+    "leaves": 5255,
+    "detailsLeaves": 5252,
+    "deleteLeaves": 3,
+    "packages": 884,
+    "versions": 4644,
+    "versionsPresent": 4644,
+    "quads": 1753337
+  },
+  "contexts": {
+    "remote": [],
+    "inline": [
+      {
+        "sha256": "08234e3797d1dea942c8af3672534c9cf8be12fbc03102387574270ff2c9b810",
+        "leaves": 5252
+      },
+      {
+        "sha256": "d733d100f0bbc6fedea1b67f8203f8e91383f740c0086dd7825307fc51c974f0",
+        "leaves": 3
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "commits.ndjson",
+      "bytes": 1198836,
+      "sha256": "bad0a2d72bfe8a52ff9fba4275a6fb3179bc3eaacd825a5d1accc86944aedb9e"
+    },
+    {
+      "path": "ids.txt",
+      "bytes": 79841,
+      "sha256": "3c385817bb1e3d18a6ca693993a62c88867404901d54da59d63db24fb1316203"
+    },
+    {
+      "path": "leaves.ndjson",
+      "bytes": 100636101,
+      "sha256": "732da0041c955de8360d73c76e1cdb09d4c366dc8778b2cd6aa6c6a6a80363ee"
+    }
+  ]
+}

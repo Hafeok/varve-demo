@@ -111,3 +111,88 @@ endpoint (Varve ADR 0105).
   second over HTTP, which is itself evidence about the server.
 - The URN scheme `urn:varve-demo:` is ours; it is not registered, and the
   README says so.
+
+## Amendment, 2026-11-03: the window, measured from the catalog
+
+Filed unaccepted by session 03, on #5 (slice 1a). Point 2 asks slice 1 to find
+the window's lower bound from the catalog, with the evidence. Point 6 makes
+the window the knob that meets S1's target.
+
+**The subset.** The top 3 000 ids by total downloads came from nuget.org's
+search on 2026-11-03T11:34:33Z (`snapshot/query.json`, `snapshot/ids.txt`).
+
+**How the catalog was read.** Every page of the catalog index (23 462 pages,
+read on 2026-11-03) was scanned for items whose `nuget:id` is in the subset:
+890 024 leaves, 2015 to 2026. Leaves were then fetched and checked for a
+`deprecation` member and a `vulnerabilities` member:
+
+- every subset details leaf committed from 2019-01-01 to 2019-10-02, and from
+  2020-04-01 to 2020-07-18;
+- 150 subset leaves a month, chosen with a fixed seed, from 2018-01 to
+  2022-12.
+
+**The first deprecation data** among the subset: catalog commit
+`a70b11ea-c7fa-4caf-9ad4-491d7ed7fcd1` at `2019-09-23T20:19:02.5590692Z`, on
+catalog page 8916, leaf
+`https://api.nuget.org/v3/catalog0/data/2019.09.23.20.19.02/nuget.core.2.14.0.json`
+(NuGet.Core 2.14.0). No subset leaf from 2019-01-01 up to that commit carries
+`deprecation`, and none of the 2018 sample does.
+
+**The first vulnerability data** among the subset: catalog commit
+`86092097-3e3a-45c4-93da-a112c8cfc71b` at `2020-07-17T01:23:23.8340284Z`, on
+catalog page 10556, leaf
+`https://api.nuget.org/v3/catalog0/data/2020.07.17.01.23.23/dotnetzip.1.9.2.json`
+(DotNetZip 1.9.2). No subset leaf from 2020-04-01 up to that commit carries
+`vulnerabilities`, and none of the sample from 2018-01 does.
+
+**What a window from there would cost.** From 2019-09-23 to 2026-11-03 the
+subset has 237 767 catalog commits and 657 014 leaves. From 2020-07-17 it
+has 214 921 commits and 614 895 leaves. The import measured below runs at
+about 34 commits and 35 000 quads a second, and a leaf averages 334 quads.
+Either window is a replay of hours, not minutes.
+
+**The rate, measured.** Varve `v0.1.0-preview.15` in a container, on this
+session's machine (a cloud container, not the CI runner). The import is
+two weeks, below, and the importer runs on the host:
+
+| | |
+|---|---|
+| retained catalog commits | 1 731 |
+| quads | 1 753 337 |
+| import | 50.6 s: 34.2 commits/s, 34 639 quads/s |
+| final checkpoint | 12.5 s |
+| server resident memory | 53 MB before, 713 MB after |
+
+Four weeks (2026-10-06 to 2026-11-03) is 3 399 commits but 12 579 247 quads,
+since one advisory reflow rewrote hundreds of large SixLabors.ImageSharp
+leaves several times. At the same rate that is about six minutes, over S1's
+budget.
+
+**The lower bound proposed: 2026-10-20T00:00:00Z; the upper bound, the
+snapshot date, 2026-11-03T00:00:00Z** (`snapshot/inputs.json`). The window
+holds S2's and S3's story:
+
+- **S3**: advisory `GHSA-v76p-62qx-wwq2` is added to SixLabors.ImageSharp
+  3.0.0, 3.0.1, 3.0.2 and 15 other versions at
+  `2026-10-26T16:04:33.9723859Z`, after earlier leaves of the same versions
+  inside the window. So an as-of answer before and after it differs.
+- **S2**: at the window's end, 26 deprecated versions (MySqlConnector,
+  StackExchange.Redis, Respite, AutoMapper) and 343 vulnerable ones
+  (MySqlConnector, SixLabors.ImageSharp).
+
+**What the window leaves out, said plainly.** A package version enters the
+dataset only if the catalog wrote a leaf for it inside the window. The window
+holds 884 of the 3 000 packages and 4 644 versions. A lock file naming a
+version with no leaf inside the window gets "outside the subset" for it, not
+a false "clean". The README says where history begins and why.
+
+**This departs from point 2's wording**, which puts the lower bound where the
+catalog starts carrying deprecation and vulnerability data. That bound
+(2019-09-23, or 2020-07-17 for both) is recorded above. Point 6 makes the
+window the knob, and that bound cannot meet S1's target. The choice is the
+maintainer's:
+
+1. accept the two-week window, which keeps S1's 3 minutes;
+2. keep the bound from point 2 and move S1's target to hours; or
+3. accept the two-week window for S1 and add, by a later ADR, a long-history
+   snapshot for S3 alone, imported once and cloned (S7's route).
