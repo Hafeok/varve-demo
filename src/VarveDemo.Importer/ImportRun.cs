@@ -147,6 +147,7 @@ public sealed class ImportRun
                 + described.Quads.ToString(CultureInfo.InvariantCulture) + " quads. History before " + SnapshotInputs.Format(manifest.From) + " is not replayed; `varve-demo import --since <date>` replays it."
             : "base: none; every catalog commit from " + SnapshotInputs.Format(manifest.From) + " is replayed").ConfigureAwait(false);
 
+        await _out.WriteLineAsync("model: the store keeps each version's advisory state (id, version, listing, deprecation, vulnerabilities), not the whole catalog leaf (ADR 0010)").ConfigureAwait(false);
         await _server.WaitReadyAsync(_settings.ReadyTimeout, _out, cancellationToken).ConfigureAwait(false);
         long bound = await _server.MaxAsOfDistanceAsync(_importer, cancellationToken).ConfigureAwait(false);
         if (_settings.CheckpointEveryCommits <= 0 || _settings.CheckpointEveryCommits >= bound)

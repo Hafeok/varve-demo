@@ -17,7 +17,9 @@ namespace VarveDemo.Tool;
 /// deep history, rebuilt from the catalog with no base, every catalog commit
 /// from <c>since</c> to the pinned snapshot's upper bound. It is a snapshot of
 /// its own, with its own manifest and hash, printed before the import; the
-/// pinned manifest does not cover it, and the step checks never run it.
+/// pinned manifest does not cover it, and the step checks never run it. Its
+/// leaves are all pruned by the base's rule, which keeps exactly what the
+/// graph model reads (ADR 0010's amendment), so the quads are the same.
 /// </summary>
 internal static class DeepHistory
 {
@@ -29,7 +31,7 @@ internal static class DeepHistory
             throw new UsageException("--since must be before the snapshot's upper bound, " + SnapshotInputs.Format(pinned.To) + ".");
         }
 
-        SnapshotInputs inputs = new(pinned.N, PinnedIds.Ids(), since, pinned.To, Base: false);
+        SnapshotInputs inputs = new(pinned.N, PinnedIds.Ids(), since, pinned.To, Base: false, PruneWindow: true);
         string directory = Path.Combine(cache, "since-" + since.ToString("yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture));
         if (!File.Exists(Path.Combine(directory, "manifest.json")))
         {

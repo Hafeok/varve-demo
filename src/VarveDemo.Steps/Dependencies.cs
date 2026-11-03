@@ -86,8 +86,11 @@ public sealed record DependencyReport(string Query, IReadOnlyList<DependencyAnsw
 /// </summary>
 public static class Dependencies
 {
-    private const string LockValues = "VALUES (?lockId ?lockVersion ?g ?package) { }";
-    private const string PackageValues = "VALUES ?package { }";
+    private const string BeginBlock = "# BEGIN per package\n";
+    private const string EndBlock = "# END per package\n";
+    private const string SampleId = "\"newtonsoft.json\"";
+    private const string SampleVersion = "\"13.0.1\"";
+    private const string SampleGraph = "<urn:varve-demo:pkg/newtonsoft.json/13.0.1>";
 
     /// <summary>The package versions a lock file resolves, each once, project references excluded.</summary>
     public static IReadOnlyList<LockedPackage> ReadLockFile(string path)
@@ -112,45 +115,40 @@ public static class Dependencies
         return [.. packages.Values];
     }
 
-    /// <summary>The query for <paramref name="packages"/>: <c>deps.rq</c> with its two <c>VALUES</c> blocks filled.</summary>
+    /// <summary>
+    /// The query for <paramref name="packages"/>: <c>deps.rq</c>'s per-package
+    /// block once for each, its sample constants replaced, joined by UNION.
+    /// </summary>
     public static string Query(IEnumerable<LockedPackage> packages)
     {
         ArgumentNullException.ThrowIfNull(packages);
-        string template = SparqlSelect.Load("deps.rq");
-        StringBuilder rows = new();
-        SortedSet<string> prefixes = new(StringComparer.Ordinal);
+        string template = SparqlSelect.Load("deps.rq").ReplaceLineEndings("\n");
+        int begin = template.IndexOf(BeginBlock, StringComparison.Ordinal);
+        int end = template.IndexOf(EndBlock, StringComparison.Ordinal);
+        if (begin < 0 || end < begin)
+        {
+            throw new InvalidDataException("deps.rq has lost its per-package block markers.");
+        }
+
+        string block = template[(begin + BeginBlock.Length)..end].Trim('\n');
+        List<string> blocks = [];
         foreach (LockedPackage package in packages)
         {
             string id = package.Id.ToLowerInvariant();
             string version = package.Version.ToLowerInvariant();
-            string prefix = "urn:varve-demo:pkg/" + DemoNames.Encode(id) + "/";
-            prefixes.Add(prefix);
-            rows.Append("\n    (");
-            NTriplesTerms.Literal(rows, id);
-            rows.Append(' ');
-            NTriplesTerms.Literal(rows, version);
-            rows.Append(' ');
-            NTriplesTerms.Iri(rows, DemoNames.VersionGraph(id, version));
-            rows.Append(' ');
-            NTriplesTerms.Literal(rows, prefix);
-            rows.Append(')');
+            StringBuilder idLiteral = new();
+            NTriplesTerms.Literal(idLiteral, id);
+            StringBuilder versionLiteral = new();
+            NTriplesTerms.Literal(versionLiteral, version);
+            StringBuilder graph = new();
+            NTriplesTerms.Iri(graph, DemoNames.VersionGraph(id, version));
+            blocks.Add(block
+                .Replace(SampleGraph, graph.ToString(), StringComparison.Ordinal)
+                .Replace(SampleId, idLiteral.ToString(), StringComparison.Ordinal)
+                .Replace(SampleVersion, versionLiteral.ToString(), StringComparison.Ordinal));
         }
 
-        StringBuilder packageRows = new();
-        foreach (string prefix in prefixes)
-        {
-            packageRows.Append("\n        ");
-            NTriplesTerms.Literal(packageRows, prefix);
-        }
-
-        if (!template.Contains(LockValues, StringComparison.Ordinal) || !template.Contains(PackageValues, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("deps.rq has lost its VALUES placeholders.");
-        }
-
-        return template
-            .Replace(LockValues, "VALUES (?lockId ?lockVersion ?g ?package) {" + rows + "\n  }", StringComparison.Ordinal)
-            .Replace(PackageValues, "VALUES ?package {" + packageRows + "\n      }", StringComparison.Ordinal);
+        return template[..begin] + string.Join("\n  UNION\n", blocks) + "\n" + template[(end + EndBlock.Length)..].TrimStart('\n');
     }
 
     /// <summary>Asks S2's question for <paramref name="packages"/>; <paramref name="topIds"/> is the subset's id list.</summary>

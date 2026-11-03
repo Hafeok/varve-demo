@@ -20,6 +20,7 @@ internal static class Program
           varve-demo snapshot top     --n 3000 --out snapshot
           varve-demo snapshot build   --inputs snapshot --out <empty dir> [--manifest <path to write>] [--check snapshot/manifest.json]
           varve-demo snapshot verify  --snapshot <dir> [--manifest <path>]
+          varve-demo snapshot recount --snapshot <dir> [--inputs snapshot] [--manifest <path to write>]
           varve-demo snapshot pack    --snapshot <dir> --out <file.tar.gz>
           varve-demo import           --snapshot <dir or URL> | --since <date>   [--server <url> --issuer <url> --issuer-address <url>] [--results <file>]
           varve-demo count            --server <url> --issuer <url> [--issuer-address <url>]
@@ -64,6 +65,7 @@ internal static class Program
         {
             ("snapshot", "top") => SnapshotCommands.TopAsync(new Arguments(args, 2), cancellationToken),
             ("snapshot", "build") => SnapshotCommands.BuildAsync(new Arguments(args, 2), cancellationToken),
+            ("snapshot", "recount") => SnapshotCommands.RecountAsync(new Arguments(args, 2), cancellationToken),
             ("snapshot", "verify") => SnapshotCommands.VerifyAsync(new Arguments(args, 2), cancellationToken),
             ("snapshot", "pack") => SnapshotCommands.PackAsync(new Arguments(args, 2), cancellationToken),
             ("import", _) => ImportCommand.RunAsync(new Arguments(args, 1), cancellationToken),

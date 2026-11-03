@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Formats.Tar;
 using System.Globalization;
+using System.Linq;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
@@ -74,6 +75,36 @@ internal static class SnapshotCommands
         }
 
         return 1;
+    }
+
+    /// <summary>
+    /// <c>snapshot recount</c>: the manifest of a built snapshot recomputed
+    /// with this tool's mapping, from its files, when only the mapping changed.
+    /// What the catalog scan determined (pages, skipped commits, deletes,
+    /// contexts) is carried over from the snapshot's own manifest; CI's rebuild
+    /// from nuget.org checks all of it.
+    /// </summary>
+    public static async Task<int> RecountAsync(Arguments arguments, CancellationToken cancellationToken)
+    {
+        string directory = arguments.Required("snapshot");
+        string inputsDirectory = arguments.OrDefault("inputs", "snapshot");
+        string? manifestPath = arguments.Optional("manifest");
+        arguments.RefuseUnknown();
+        SnapshotInputs inputs = SnapshotInputs.Read(inputsDirectory);
+        SnapshotManifest old = SnapshotManifest.Read(await File.ReadAllBytesAsync(Path.Combine(directory, "manifest.json"), cancellationToken).ConfigureAwait(false));
+        List<CatalogCommit> commits = [.. File.ReadLines(Path.Combine(directory, "commits.ndjson")).Select(SnapshotReader.ParseCommit)];
+        SnapshotDraft draft = new([], old.Base?.DeletedBefore ?? 0, commits, old.Counts.CatalogCommitsSkipped, old.Pages, old.InlineContexts);
+        SnapshotManifest manifest = await ManifestWriter.CompleteAsync(draft, inputs, directory, ToolVersion.Text, cancellationToken).ConfigureAwait(false);
+        byte[] json = manifest.ToJson();
+        await File.WriteAllBytesAsync(Path.Combine(directory, "manifest.json"), json, cancellationToken).ConfigureAwait(false);
+        if (manifestPath is not null)
+        {
+            await File.WriteAllBytesAsync(manifestPath, json, cancellationToken).ConfigureAwait(false);
+        }
+
+        await Console.Out.WriteLineAsync("snapshot: recounted with " + ToolVersion.Text + ": base " + manifest.Base?.Quads.ToString(CultureInfo.InvariantCulture)
+            + " quads, window " + manifest.Counts.Quads.ToString(CultureInfo.InvariantCulture) + " quads; sha256 " + manifest.Sha256).ConfigureAwait(false);
+        return 0;
     }
 
     public static async Task<int> VerifyAsync(Arguments arguments, CancellationToken cancellationToken)

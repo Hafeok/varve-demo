@@ -26,7 +26,8 @@ namespace VarveDemo.Snapshot;
 /// for the pinned snapshot; false for <c>import --since</c>'s deep replay.
 /// </param>
 /// <param name="BaseSample">A seeded sample of the base, for a projection only; null for the whole base.</param>
-public sealed record SnapshotInputs(int N, IReadOnlyList<string> Ids, DateTimeOffset From, DateTimeOffset To, bool Base = true, BaseSample? BaseSample = null)
+/// <param name="PruneWindow">Keep window leaves pruned too, by the base's rule: for <c>import --since</c>, whose hundreds of thousands of whole leaves would not fit in memory.</param>
+public sealed record SnapshotInputs(int N, IReadOnlyList<string> Ids, DateTimeOffset From, DateTimeOffset To, bool Base = true, BaseSample? BaseSample = null, bool PruneWindow = false)
 {
     /// <summary>Reads <c>inputs.json</c> and the id list it names, from <paramref name="directory"/>.</summary>
     public static SnapshotInputs Read(string directory)

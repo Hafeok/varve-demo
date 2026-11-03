@@ -31,6 +31,9 @@ public static class DemoNames
     /// <summary>The package a base state is of.</summary>
     public const string BasePackage = Term + "basePackage";
 
+    /// <summary>The package id, lower-cased, on each version's leaf (ADR 0010's amendment).</summary>
+    public const string PackageId = Term + "packageId";
+
     /// <summary>The version key's predicate (ADR 0010 point 5).</summary>
     public const string VersionKey = Term + "versionKey";
 
@@ -109,7 +112,7 @@ public sealed class LeafRefusedException : Exception
 public static class CatalogUpdate
 {
     /// <summary>The mapping's version, part of the tool version a snapshot names.</summary>
-    public const string MappingVersion = "3";
+    public const string MappingVersion = "4";
 
     /// <summary>
     /// The base state of one package (ADR 0008's amendment): one graph per
@@ -250,15 +253,21 @@ public static class CatalogUpdate
             count++;
         }
 
-        // The version key, on the leaf's own node (ADR 0010 point 5).
+        // The version key, on the leaf's own node (ADR 0010 point 5), and the
+        // package id lower-cased, so a query finds a package's versions by
+        // index (ADR 0010's amendment of 2026-11-03).
         string version = VersionOf(leaf);
         NTriplesTerms.Iri(update, leaf.Ref.Url);
         update.Append(' ');
         NTriplesTerms.Iri(update, DemoNames.VersionKey);
         update.Append(' ');
         NTriplesTerms.Literal(update, VersionKey.Of(version));
+        update.Append(" ;\n  ");
+        NTriplesTerms.Iri(update, DemoNames.PackageId);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, leaf.Ref.Id.ToLowerInvariant());
         update.Append(" .\n");
-        return count + 1;
+        return count + 2;
     }
 
     /// <summary>The leaf's own normalised <c>version</c>; the page's when the leaf has none.</summary>

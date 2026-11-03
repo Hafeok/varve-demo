@@ -68,7 +68,9 @@ public sealed partial class DemoServer
                 using HttpResponseMessage response = await _http.GetAsync(new Uri(Server, "health/ready"), cancellationToken).ConfigureAwait(false);
                 string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 using JsonDocument document = JsonDocument.Parse(body);
+                // Ready, the datasets are an object by name; not ready, an array of entries.
                 if (document.RootElement.TryGetProperty("datasets", out JsonElement datasets)
+                    && datasets.ValueKind == JsonValueKind.Object
                     && datasets.TryGetProperty(Dataset, out JsonElement state)
                     && string.Equals(state.GetProperty("state").GetString(), "ready", StringComparison.Ordinal))
                 {

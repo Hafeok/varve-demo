@@ -215,7 +215,7 @@ public sealed class SnapshotBuilder
 
             JsonElement context = LeafProjection.InlineContext(document.RootElement, leaf.Url);
             inline.AddOrUpdate(Sha256Text.Of(Minify(context)), 1, static (_, count) => count + 1);
-            bodies[leaf.Url] = baseUrls.Contains(leaf.Url) && !windowUrls.Contains(leaf.Url)
+            bodies[leaf.Url] = inputs.PruneWindow || (baseUrls.Contains(leaf.Url) && !windowUrls.Contains(leaf.Url))
                 ? LeafProjection.Project(document.RootElement, leaf.Url)
                 : Minify(document.RootElement);
             int done = Interlocked.Increment(ref fetched);

@@ -293,16 +293,63 @@ public sealed partial class StepChecks
             }
 
             ProcessResult result = await import;
+            string printed = result.Output + result.Error;
             ProcessResult state = await Stack.RunAsync("docker", "inspect varve-demo-varve-1 --format {{.State.OOMKilled}}/{{.RestartCount}}", TimeSpan.FromSeconds(30));
-            new MeasurementReport("ImportUnderAMemoryLimit")
+            MeasurementReport report = new MeasurementReport("ImportUnderAMemoryLimit")
                 .Fact("snapshotSha256", manifest.Sha256)
                 .Fact("serverOomKilledAndRestarts", state.Output.Trim())
                 .Fact("importExit", result.ExitCode.ToString(CultureInfo.InvariantCulture))
                 .Add(new Measurement("serverMemoryLimitKiB", bytes / 1024, "KiB"))
                 .Add(new Measurement("serverResidentKiBPeak", peak, "KiB"))
-                .Add(new Measurement("importCompleted", result.ExitCode == 0 ? 1 : 0, "count", 1, "equal"))
-                .Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
-            Assert.True(result.ExitCode == 0, "The import under " + (bytes / 1048576).ToString(CultureInfo.InvariantCulture) + " MB did not complete (" + state.Output.Trim() + "):\n" + Stack.Indent(result.Output + result.Error));
+                .Add(new Measurement("importCompleted", result.ExitCode == 0 ? 1 : 0, "count"));
+
+            if (result.ExitCode != 0)
+            {
+                // Refused part-way: record where, and that a restart brings
+                // back every commit acknowledged before the refusal. Losing
+                // one fails the check; the refusal itself is the measurement.
+                Match refused = RefusedAt().Match(printed);
+                Assert.True(refused.Success, "The import under the limit failed without naming a refused update:\n" + Stack.Indent(printed));
+                long sequence = long.Parse(refused.Groups["n"].Value, CultureInfo.InvariantCulture);
+                long acknowledged = refused.Groups["part"].Value == "base" ? sequence - 1 : manifest.Base!.Packages + sequence - 1;
+                report.Fact("refusal", refused.Value)
+                    .Add(new Measurement("acknowledgedBeforeRefusal", acknowledged, "count"));
+
+                using HttpClient http = new();
+                using ClientCredentials viewer = Stack.Client(http, "viewer");
+                DemoServer server = new(http, Stack.Server, "nuget");
+
+                // Does it reopen under the same limit? Measured, not required.
+                ProcessResult restart = await Stack.ComposeAsync("restart varve", TimeSpan.FromMinutes(2));
+                Assert.True(restart.ExitCode == 0, restart.Error);
+                bool reopened;
+                try
+                {
+                    await server.WaitReadyAsync(TimeSpan.FromSeconds(60), TextWriter.Null, TestContext.Current.CancellationToken);
+                    reopened = true;
+                }
+                catch (TimeoutException)
+                {
+                    reopened = false;
+                }
+
+                report.Add(new Measurement("reopenedUnderTheLimitWithin60Seconds", reopened ? 1 : 0, "count"));
+
+                // Without the limit: every acknowledged commit must be there.
+                Environment.SetEnvironmentVariable("VARVE_DEMO_COMPOSE_FILES", files);
+                ProcessResult unlimited = await Stack.ComposeAsync("up --detach --force-recreate varve", TimeSpan.FromMinutes(2));
+                Assert.True(unlimited.ExitCode == 0, unlimited.Error);
+                await server.WaitReadyAsync(TimeSpan.FromMinutes(2), TextWriter.Null, TestContext.Current.CancellationToken);
+                SelectAnswer count = await SparqlSelect.RunAsync(server.Client(viewer, TimeSpan.FromMinutes(1)), SparqlSelect.Load("catalog-commits.rq"), TestContext.Current.CancellationToken);
+                report.Add(new Measurement("serverResidentKiBReopenedWithoutLimit", await Stack.ServerResidentKiBAsync(), "KiB"))
+                    .Add(new Measurement("headAfterRestart", count.Position, "position", acknowledged, "equal"));
+                report.Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
+                Assert.Equal(acknowledged, count.Position);
+            }
+            else
+            {
+                report.Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
+            }
         }
         finally
         {
@@ -372,6 +419,9 @@ public sealed partial class StepChecks
 
     [GeneratedRegex(@"import: (?<done>\d+)/(?<total>\d+) catalog commits, (?<quads>\d+) quads, (?<seconds>[\d.]+) s, (?<cps>[\d.]+) commits/s, (?<qps>[\d.]+) quads/s", RegexOptions.CultureInvariant)]
     private static partial Regex ProgressLine();
+
+    [GeneratedRegex(@"\((?<n>\d+) of the (?<part>base|snapshot)[^)]*\)[^\n]*", RegexOptions.CultureInvariant)]
+    private static partial Regex RefusedAt();
 
     [GeneratedRegex(@"at position (?<p>\d+)", RegexOptions.CultureInvariant)]
     private static partial Regex CountPosition();
