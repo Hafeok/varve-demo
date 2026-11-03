@@ -251,3 +251,21 @@ guide's description of `MaxAsOfDistance` as a distance below the head, which
 led this ADR's first draft astray, is
 [Hafeok/Varve#161](https://github.com/Hafeok/Varve/issues/161); at
 `v0.1.0-preview.15` `docs/operator/configure.md:169` still says it.
+
+## Amendment, 2026-11-03: the checkpoints are taken by a dataset admin
+
+Filed unaccepted by session 03, on #5. Point 7's "through the operator
+client" is narrowed by ADR 0007's amendment of this date: the importer takes
+the checkpoints through `varve-demo-checkpointer`, which holds `admin` on the
+dataset `nuget` and nothing more, on the same route. The bootstrap operator
+only declares the dataset and its grants. S3's screen says the importer
+takes the checkpoints "as the dataset's admin", not "as the operator".
+
+**Every K commits, and slice 1a.** Point 6 says there are no checkpoints
+during the import, one at its end, and then one whenever more than K commits
+have landed since the last. Slice 1a's importer does exactly that: it checks
+K against `maxAsOfDistance` at start, and takes the final checkpoint. The
+"every K" rule binds the commits after the import, which arrive with S4's
+live tail in slice 2. The hand-off prompt for slice 1a asked for a
+checkpoint every K commits during the import; this ADR's point 6 and its
+alternative 8 reject that, and the importer follows the ADR.

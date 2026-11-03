@@ -137,3 +137,57 @@ Filed unaccepted by session 03, on #3, the bump to `0.1.0-preview.15`.
 
 Point 5's case of a token under OIDC that yields no agent is filed as
 [Hafeok/Varve#162](https://github.com/Hafeok/Varve/issues/162).
+
+## Amendment, 2026-11-03: least privilege, and a checkpointer client
+
+Filed unaccepted by session 03, on #5 (slice 1a). It narrows point 4.
+
+**What changes.** Point 4 has the bootstrap operator, which holds
+`server-admin`, take the importer's checkpoints. A sceptical viewer reading
+`compose.yaml` should find that each long-running service holds only what it
+needs. So:
+
+1. **The operator is used once.** `varve-demo-operator` stays the bootstrap
+   operator, and only the one-shot `setup` service uses it, with
+   `varve apply deploy/nuget.trig`. That declares the dataset and its
+   grants. No long-running service holds the operator's credentials.
+2. **A fourth client, `varve-demo-checkpointer`**, holds `admin` on the
+   dataset `nuget` alone, by a grant in that declaration to its role
+   `varve-demo.checkpointer`. It is not an operator, and its tokens are for
+   the management plane's audience only. The importer takes ADR 0004's
+   checkpoints through it.
+3. **The importer client holds `write`** on every graph of `nuget` (its role
+   `varve-demo.importer`). The viewer client holds `read`. Neither holds
+   `admin`.
+
+**Why a separate client, not `admin` on the importer client.**
+
+- **One audience per client.** Varve refuses a token whose `aud` names both
+  planes (point 4, `ServerHost.cs:376-381, 459-470`). The importer's data
+  writes need the data plane's audience; a checkpoint needs the management
+  plane's. The mock issuer maps claims by a single request parameter, so
+  one audience per client is the plain way to give each token exactly one
+  audience.
+- **What each token can do is what its client is for.** An importer token
+  can write the dataset and nothing on the management plane. A checkpointer
+  token can reach the dataset's management resources and nothing on the
+  data plane. Measured against `v0.1.0-preview.15` on 2026-11-03:
+  - a checkpointer token posting an update to `/datasets/nuget/sparql` is
+    `401`;
+  - a viewer token posting the same update is `403`;
+  - a checkpointer token posting to `/manage/datasets/nuget/checkpoints` is
+    `201`.
+- **The agent stays the writer's.** Every data commit is made by the
+  importer's token, so point 5's agent is the importer's subject. A
+  checkpoint is not a commit.
+
+The importer process holds two client credentials, the importer's and the
+checkpointer's, and the README says so. With the mock issuer they are client
+ids with no real secret; with a real issuer they are two registrations.
+
+ADR 0004 point 7 says the checkpoints are taken "through the operator
+client, in the operator's role". Its own amendment of this date points here.
+Its ruling `ImporterTakesCheckpointsAsOperator` is accepted, and this
+narrows who "the operator" is to a dataset admin. If the maintainer reads
+that as a change of meaning rather than a refinement, ADR 0001 point 4 asks
+for a superseding ADR instead, and this amendment becomes its draft.

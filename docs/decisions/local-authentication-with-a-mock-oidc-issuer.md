@@ -27,8 +27,13 @@ decisions:
     statement: "The README says the issuer is a mock and shows how to point the demo at a real issuer"
     accepted-by: mailto:emil@okkels-klein.dk
     accepted-at: 2026-10-26T11:49:23Z
+  - key: CheckpointsByADatasetAdminClient
+    statement: "Checkpoints are taken by varve-demo-checkpointer, which holds admin on the dataset alone with management-audience tokens; the bootstrap operator is used only by a one-shot setup service"
 ---
 
 The rulings of [ADR 0007](../adr/0007-local-authentication-with-a-mock-oidc-issuer.md), filed by session 01 of #1 on
 2026-10-23 and accepted by the maintainer on 2026-10-26, on the foundation's
-pull request #2. Every ruling carries `accepted-by` and `accepted-at`.
+pull request #2. Every ruling filed then carries `accepted-by` and `accepted-at`.
+
+`CheckpointsByADatasetAdminClient` is the 2026-11-03 amendment's ruling, filed
+unaccepted by session 03 on #5.
