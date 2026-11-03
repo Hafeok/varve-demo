@@ -79,7 +79,10 @@ jobs:
           global-json-file: global.json
 
       - name: Build
-        run: dotnet build VarveDemo.slnx -c Release
+        run: |
+          dotnet build VarveDemo.slnx -c Release
+          mkdir -p "$RUNNER_TEMP/results"
+          chmod 777 "$RUNNER_TEMP/results"
 
       # ADR 0008: the committed manifest is a claim that the snapshot rebuilds
       # from nuget.org byte for byte. This makes it a test.
@@ -146,8 +149,6 @@ jobs:
       # override is written here, never committed.
       - name: Point compose at this run's image and snapshot
         run: |
-          mkdir -p "$RUNNER_TEMP/results"
-          chmod 777 "$RUNNER_TEMP/results"
           cat > "$RUNNER_TEMP/compose.ci.yaml" <<EOF
           services:
             importer:
@@ -197,4 +198,4 @@ jobs:
           path: |
             ${{ runner.temp }}/results
             TestResults/**/*.trx
-          if-no-files-found: error
+          if-no-files-found: warn

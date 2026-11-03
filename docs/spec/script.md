@@ -120,8 +120,13 @@ Docker. The mock issuer starts, the Varve server starts, and the importer
 authenticates and replays the snapshot over HTTP, one Varve commit per catalog
 commit, printing commits per second and quads per second as it goes. It names
 the snapshot's two parameters, N and the catalog time window, so the viewer
-knows what history is loaded. The first answer to S2's question then prints,
-with the time from the command to the answer.
+knows what history is loaded. It takes the final checkpoint, as the
+dataset's admin, and says so. The first answer then prints: the number of
+catalog commits the dataset holds, which the snapshot's manifest predicts,
+with the query beside it. CI measures the time from the command to that
+answer. S2's question follows, asked with `varve-demo deps`. (Amended
+2026-11-03 for slice 1a, #5: the first answer was S2's question; the planning
+for slice 1a made it the count, so S1 needs no lock file.)
 
 **Acceptance criteria**
 
@@ -129,7 +134,8 @@ with the time from the command to the answer.
    argument reaches a printed answer and exits the importer with code 0.
 2. Every image the compose file starts is from `ghcr.io` or `public.ecr.aws`,
    pinned by digest; the Varve image's tag is `v$(VarveVersion)` and its
-   attestation verifies (`gh attestation verify`) before the run.
+   attestation verifies (`gh attestation verify`) before the run, as does the
+   importer image's (ADR 0011).
 3. The server runs with OIDC authentication against the mock issuer; a request
    without a token is `401`.
 4. The load is a **full replay** (ADR 0008): every catalog commit the
@@ -166,6 +172,29 @@ package with its resolved version, the reason (deprecation reason or advisory
 and severity), and the suggested version: the deprecation's alternate package,
 or the lowest listed version above it with no known vulnerability. Packages
 outside the demo's subset are listed as such, never dropped.
+
+**The rules**, as `src/VarveDemo.Steps/Queries/deps.rq` and the oracle each
+apply them (amended 2026-11-03, #5):
+
+- A locked version is **in the snapshot** when its version's graph exists
+  after the snapshot's last commit. Otherwise it is **outside the subset**,
+  for one of two reasons, which the answer states: its id is not among the
+  top N, or the snapshot's window holds no leaf for that version (ADR 0008's
+  amendment of 2026-11-03).
+- It is **deprecated** when its leaf has a `deprecation`, and **vulnerable**
+  when it has a `vulnerability`. Either one puts it in **flagged**; neither
+  puts it in **clean**.
+- **What to move to**, for a flagged version:
+  - when it is deprecated with an alternate package, that package and its
+    range;
+  - otherwise the lowest version of the same package in the snapshot, by
+    NuGet's order, that is above it, states `listed` true, is neither
+    deprecated nor vulnerable, and is a release unless the locked version is
+    a prerelease;
+  - otherwise none, said so.
+
+  The snapshot holds only what its window touched, so "lowest" is lowest
+  among those versions, and the README says so.
 
 **Acceptance criteria**
 
