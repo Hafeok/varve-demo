@@ -200,15 +200,26 @@ jobs:
       # override is written here, never committed.
       - name: Point compose at this run's image and snapshot
         run: |
+          # The snapshot's download counts toward S1: when it was not rebuilt,
+          # the importer downloads the published asset, as a viewer's does.
+          # When it was rebuilt (a change to what it is a function of), no
+          # asset exists for it yet, and the rebuilt directory is mounted.
+          if [ "${{ steps.mode.outputs.rebuild }}" = "true" ]; then
+            source="/snapshot"
+            mount="      - $RUNNER_TEMP/snapshot:/snapshot:ro"
+          else
+            source="https://github.com/Hafeok/varve-demo/releases/download/${{ steps.mode.outputs.tag }}/snapshot.tar.gz"
+            mount=""
+          fi
           cat > "$RUNNER_TEMP/compose.ci.yaml" <<EOF
           services:
             importer:
               environment:
-                VARVE_DEMO_SNAPSHOT: /snapshot
+                VARVE_DEMO_SNAPSHOT: $source
                 VARVE_DEMO_RESULTS: /results/s1-compose-import.json
               volumes:
-                - $RUNNER_TEMP/snapshot:/snapshot:ro
                 - $RUNNER_TEMP/results:/results
+          $mount
           EOF
           cat "$RUNNER_TEMP/compose.ci.yaml"
           # CI only: the server held to 512 MB, for ImportUnderAMemoryLimit.
