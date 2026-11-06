@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The snapshot (ADR 0008): the top-N id list, the catalog leaves inside the
+    window, and the manifest that pins them by hash. No Varve code: what it
+    reads and writes is nuget.org's JSON, byte for byte where it matters.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>VarveDemo.Snapshot</RootNamespace>
+  </PropertyGroup>
+
+</Project>

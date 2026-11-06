@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The independent reader of S2 (S2 criterion 3; ADR 0010 point 6): the
+    snapshot's catalog JSON read with System.Text.Json, versions ordered with
+    NuGet.Versioning. Test-only. It references no Varve package and none of
+    the demo's own libraries, so nothing the importer or the query does can
+    agree with it by sharing code; OracleIndependenceTests holds it to that.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>VarveDemo.Oracle</RootNamespace>
+    <IsTestSupport>true</IsTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NuGet.Versioning" />
+  </ItemGroup>
+
+</Project>

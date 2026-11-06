@@ -1,0 +1,77 @@
+# S2: which of my dependencies resolve to a deprecated or vulnerable
+# version, and what should I move to? (docs/spec/script.md, S2)
+#
+# The block between BEGIN and END is asked once per locked package version,
+# its three constants replaced: the id and version, lower case, and the
+# version's graph (ADR 0008 point 4). The blocks are joined by UNION. As
+# written here, the file is the query for one package. Constants, not
+# VALUES: Varve's planner drives the index from a constant and not from a
+# VALUES binding, https://github.com/Hafeok/Varve/issues/228. The bump that
+# adopts its fix returns this query to one block with VALUES (ADR 0010).
+#
+# Terms are the catalog's own (ADR 0010). vd:versionKey orders versions as
+# NuGet does, and has a "-" exactly for a prerelease; vd:packageId is the id
+# lower-cased, so a package's versions are found by index.
+PREFIX nuget: <http://schema.nuget.org/schema#>
+PREFIX vd: <urn:varve-demo:term:>
+
+SELECT ?lockId ?lockVersion ?key ?deprecated ?reasons ?alternate ?alternateVersions ?advisories
+       (MIN(CONCAT(?candidateKey, " ", ?candidateVersion)) AS ?lowestClean)
+WHERE {
+# BEGIN per package
+  {
+    BIND ("newtonsoft.json" AS ?lockId)
+    BIND ("13.0.1" AS ?lockVersion)
+
+    # The locked version: its deprecation and advisories, as the catalog states them.
+    {
+      SELECT ?key ?prerelease
+             (SAMPLE(?deprecation) AS ?deprecated)
+             (GROUP_CONCAT(DISTINCT ?reason; separator=",") AS ?reasons)
+             (SAMPLE(?alternateId) AS ?alternate)
+             (SAMPLE(?alternateRange) AS ?alternateVersions)
+             (GROUP_CONCAT(DISTINCT CONCAT(?advisory, " ", ?severity); separator=",") AS ?advisories)
+      WHERE {
+        OPTIONAL {
+          GRAPH <urn:varve-demo:pkg/newtonsoft.json/13.0.1> { ?leaf vd:versionKey ?key . }
+          BIND (CONTAINS(?key, "-") AS ?prerelease)
+          OPTIONAL {
+            GRAPH <urn:varve-demo:pkg/newtonsoft.json/13.0.1> {
+              ?leaf nuget:deprecation ?deprecation .
+              OPTIONAL { ?deprecation nuget:reasons ?reason . }
+              OPTIONAL {
+                ?deprecation nuget:alternatePackage ?alternatePackage .
+                ?alternatePackage nuget:id ?alternateId .
+                OPTIONAL { ?alternatePackage nuget:range ?alternateRange . }
+              }
+            }
+          }
+          OPTIONAL {
+            GRAPH <urn:varve-demo:pkg/newtonsoft.json/13.0.1> {
+              ?leaf nuget:vulnerability ?vulnerability .
+              ?vulnerability nuget:advisoryUrl ?advisory ; nuget:severity ?severity .
+            }
+          }
+        }
+      }
+      GROUP BY ?key ?prerelease
+    }
+
+    # The lowest listed version above it, of the same package, with no known
+    # vulnerability and no deprecation; a prerelease only for a prerelease.
+    OPTIONAL {
+      GRAPH ?candidate {
+        ?candidateLeaf vd:packageId "newtonsoft.json" ;
+          vd:versionKey ?candidateKey ;
+          nuget:version ?candidateVersion ;
+          nuget:listed true .
+      }
+      FILTER (?candidateKey > ?key && (?prerelease || !CONTAINS(?candidateKey, "-")))
+      FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:vulnerability ?any . } }
+      FILTER NOT EXISTS { GRAPH ?candidate { ?candidateLeaf nuget:deprecation ?some . } }
+    }
+  }
+# END per package
+}
+GROUP BY ?lockId ?lockVersion ?key ?deprecated ?reasons ?alternate ?alternateVersions ?advisories
+ORDER BY ?lockId ?lockVersion

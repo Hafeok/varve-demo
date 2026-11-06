@@ -1,0 +1,283 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using Varve.JsonLd;
+using Varve.Rdf;
+using VarveDemo.Snapshot;
+
+namespace VarveDemo.Importer;
+
+/// <summary>The names ADRs 0004, 0008 and 0010 fix.</summary>
+public static class DemoNames
+{
+    /// <summary>The graph that carries catalog time (ADR 0004).</summary>
+    public const string CatalogLog = "urn:varve-demo:catalog-log";
+
+    /// <summary>The demo's namespace for derived terms (ADR 0010).</summary>
+    public const string Term = "urn:varve-demo:term:";
+
+    /// <summary>A package's base state in the catalog log (ADR 0008's amendment).</summary>
+    public static string BaseState(string packageId) => "urn:varve-demo:base:" + Encode(packageId.ToLowerInvariant());
+
+    /// <summary>The catalog time a base state holds at: the window's lower bound.</summary>
+    public const string BaseAsOf = Term + "baseAsOf";
+
+    /// <summary>The package a base state is of.</summary>
+    public const string BasePackage = Term + "basePackage";
+
+    /// <summary>The package id, lower-cased, on each version's leaf (ADR 0010's amendment).</summary>
+    public const string PackageId = Term + "packageId";
+
+    /// <summary>The version key's predicate (ADR 0010 point 5).</summary>
+    public const string VersionKey = Term + "versionKey";
+
+    /// <summary>The catalog's own namespace for commit terms.</summary>
+    public const string Catalog = "http://schema.nuget.org/catalog#";
+
+    /// <summary>The catalog's package vocabulary.</summary>
+    public const string Schema = "http://schema.nuget.org/schema#";
+
+    /// <summary>A catalog commit's node in the catalog log (ADR 0010 point 4).</summary>
+    public static string CatalogCommit(string commitId) => "urn:varve-demo:catalog-commit:" + Encode(commitId);
+
+    /// <summary>
+    /// A package version's graph (ADR 0008 point 4):
+    /// <c>urn:varve-demo:pkg/{id}/{version}</c>, both lower-cased and
+    /// percent-encoded, the version as the catalog normalises it.
+    /// </summary>
+    public static string VersionGraph(string id, string version) =>
+        "urn:varve-demo:pkg/" + Encode(id.ToLowerInvariant()) + "/" + Encode(version.ToLowerInvariant());
+
+    /// <summary>Percent-encodes everything but RFC 3986's unreserved characters, as UTF-8.</summary>
+    public static string Encode(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        StringBuilder output = new(text.Length);
+        foreach (byte b in Encoding.UTF8.GetBytes(text))
+        {
+            char c = (char)b;
+            if (char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~')
+            {
+                output.Append(c);
+            }
+            else
+            {
+                output.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+            }
+        }
+
+        return output.ToString();
+    }
+}
+
+/// <summary>One catalog commit as a SPARQL Update, and what it inserts.</summary>
+/// <param name="Text">The update.</param>
+/// <param name="Quads">Quads it inserts.</param>
+/// <param name="Graphs">Version graphs it replaces or drops.</param>
+public sealed record CatalogUpdateText(string Text, long Quads, int Graphs);
+
+/// <summary>A leaf <c>Varve.JsonLd</c> refused, with its reason (ADR 0006 point 4).</summary>
+public sealed class LeafRefusedException : Exception
+{
+    /// <summary>For serialisers.</summary>
+    public LeafRefusedException()
+    {
+    }
+
+    /// <summary>With a message.</summary>
+    public LeafRefusedException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>With a message and a cause.</summary>
+    public LeafRefusedException(string message, Exception inner)
+        : base(message, inner)
+    {
+    }
+}
+
+/// <summary>
+/// Maps one retained catalog commit to one SPARQL Update (ADRs 0004, 0006,
+/// 0008, 0010): for each leaf, the version's graph is dropped and, for a
+/// details leaf, its quads inserted, as <c>Varve.JsonLd</c> produces them with
+/// the version key beside them; then the commit's catalog-log assertion.
+/// </summary>
+public static class CatalogUpdate
+{
+    /// <summary>The mapping's version, part of the tool version a snapshot names.</summary>
+    public const string MappingVersion = "4";
+
+    /// <summary>
+    /// The base state of one package (ADR 0008's amendment): one graph per
+    /// version present at the window's lower bound, and in the catalog log a
+    /// node saying this is the package's state as of that bound.
+    /// </summary>
+    public static CatalogUpdateText MapBase(SnapshotBasePackage package, DateTimeOffset asOf)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        StringBuilder update = new(64 * 1024);
+        long quads = 0;
+        int leafNumber = 0;
+        foreach (SnapshotLeaf leaf in package.Leaves)
+        {
+            string graph = DemoNames.VersionGraph(leaf.Ref.Id, leaf.Ref.Version);
+            update.Append("INSERT DATA { GRAPH ");
+            NTriplesTerms.Iri(update, graph);
+            update.Append(" {\n");
+            quads += Leaf(update, leaf, "l" + leafNumber.ToString(CultureInfo.InvariantCulture) + "_");
+            update.Append("} } ;\n");
+            leafNumber++;
+        }
+
+        update.Append("INSERT DATA { GRAPH ");
+        NTriplesTerms.Iri(update, DemoNames.CatalogLog);
+        update.Append(" {\n");
+        NTriplesTerms.Iri(update, DemoNames.BaseState(package.Id));
+        update.Append(' ');
+        NTriplesTerms.Iri(update, DemoNames.BasePackage);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, package.Id);
+        update.Append(" ;\n  ");
+        NTriplesTerms.Iri(update, DemoNames.BaseAsOf);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, SnapshotInputs.Format(asOf));
+        update.Append("^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n} }\n");
+        quads += 2;
+        return new CatalogUpdateText(update.ToString(), quads, package.Leaves.Count);
+    }
+
+    /// <summary>Counts the quads <see cref="MapBase"/> would insert.</summary>
+    public static long CountBaseQuads(SnapshotBasePackage package, DateTimeOffset asOf) => MapBase(package, asOf).Quads;
+
+    /// <summary>The update for <paramref name="commit"/>.</summary>
+    public static CatalogUpdateText Map(SnapshotCommit commit)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        StringBuilder update = new(16 * 1024);
+        long quads = 0;
+        int leafNumber = 0;
+
+        foreach (SnapshotLeaf leaf in commit.Leaves)
+        {
+            string graph = DemoNames.VersionGraph(leaf.Ref.Id, leaf.Ref.Version);
+            update.Append("DROP SILENT GRAPH ");
+            NTriplesTerms.Iri(update, graph);
+            update.Append(" ;\n");
+
+            if (leaf.Ref.IsDelete)
+            {
+                continue;
+            }
+
+            update.Append("INSERT DATA { GRAPH ");
+            NTriplesTerms.Iri(update, graph);
+            update.Append(" {\n");
+            quads += Leaf(update, leaf, "l" + leafNumber.ToString(CultureInfo.InvariantCulture) + "_");
+            update.Append("} } ;\n");
+            leafNumber++;
+        }
+
+        update.Append("INSERT DATA { GRAPH ");
+        NTriplesTerms.Iri(update, DemoNames.CatalogLog);
+        update.Append(" {\n");
+        NTriplesTerms.Iri(update, DemoNames.CatalogCommit(commit.Commit.CommitId));
+        update.Append(' ');
+        NTriplesTerms.Iri(update, DemoNames.Catalog + "commitId");
+        update.Append(' ');
+        NTriplesTerms.Literal(update, commit.Commit.CommitId);
+        update.Append(" ;\n  ");
+        NTriplesTerms.Iri(update, DemoNames.Catalog + "commitTimeStamp");
+        update.Append(' ');
+        NTriplesTerms.Literal(update, commit.Commit.CommitTimeStamp);
+        update.Append("^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n} }\n");
+        quads += 2;
+
+        return new CatalogUpdateText(update.ToString(), quads, commit.Leaves.Count);
+    }
+
+    /// <summary>Counts the quads <see cref="Map"/> would insert, without building the text.</summary>
+    public static long CountQuads(SnapshotCommit commit) => Map(commit).Quads;
+
+    private static long Leaf(StringBuilder update, SnapshotLeaf leaf, string blankPrefix)
+    {
+        // Every leaf carries its context inline. The loader refuses every
+        // remote one, as Varve.JsonLd's default does, so a leaf naming one
+        // fails the import instead of being fetched (ADR 0006's amendment).
+        JsonLdOptions options = new()
+        {
+            BaseIri = Encoding.UTF8.GetBytes(leaf.Ref.Url),
+            DocumentLoader = static (ReadOnlySpan<byte> iri, out ReadOnlyMemory<byte> document) =>
+            {
+                document = default;
+                return false;
+            },
+        };
+
+        // Every quad of the leaf, as Varve.JsonLd produces it, before the model keeps any.
+        List<(string Subject, string Predicate, string Object)> all = [];
+        StringBuilder term = new(256);
+        JsonLdResult result = JsonLdParser.Parse(leaf.Json, (in QuadView quad) =>
+        {
+            if (quad.HasGraph)
+            {
+                throw new LeafRefusedException("The leaf " + leaf.Ref.Url + " names a graph of its own; a catalog leaf is one default graph.");
+            }
+
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Subject, blankPrefix);
+            string subject = term.ToString();
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Predicate, blankPrefix);
+            string predicate = term.ToString();
+            term.Clear();
+            NTriplesTerms.Write(term, quad.Object, blankPrefix);
+            all.Add((subject, predicate, term.ToString()));
+        }, options);
+
+        if (!result.Succeeded)
+        {
+            throw new LeafRefusedException("Varve.JsonLd refused the leaf " + leaf.Ref.Url + ": " + result.Error);
+        }
+
+        long count = 0;
+        foreach ((string subject, string predicate, string obj) in AdvisoryModel.Keep(all, "<" + leaf.Ref.Url + ">"))
+        {
+            update.Append(subject).Append(' ').Append(predicate).Append(' ').Append(obj).Append(" .\n");
+            count++;
+        }
+
+        // The version key, on the leaf's own node (ADR 0010 point 5), and the
+        // package id lower-cased, so a query finds a package's versions by
+        // index (ADR 0010's amendment of 2026-11-03).
+        string version = VersionOf(leaf);
+        NTriplesTerms.Iri(update, leaf.Ref.Url);
+        update.Append(' ');
+        NTriplesTerms.Iri(update, DemoNames.VersionKey);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, VersionKey.Of(version));
+        update.Append(" ;\n  ");
+        NTriplesTerms.Iri(update, DemoNames.PackageId);
+        update.Append(' ');
+        NTriplesTerms.Literal(update, leaf.Ref.Id.ToLowerInvariant());
+        update.Append(" .\n");
+        return count + 2;
+    }
+
+    /// <summary>The leaf's own normalised <c>version</c>; the page's when the leaf has none.</summary>
+    public static string VersionOf(SnapshotLeaf leaf)
+    {
+        ArgumentNullException.ThrowIfNull(leaf);
+        Utf8JsonReader reader = new(leaf.Json.Span);
+        using JsonDocument document = JsonDocument.ParseValue(ref reader);
+        return document.RootElement.TryGetProperty("version", out JsonElement version) && version.GetString() is { Length: > 0 } text
+            ? text
+            : leaf.Ref.Version;
+    }
+}

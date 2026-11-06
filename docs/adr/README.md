@@ -19,3 +19,6 @@ specification these decisions serve.
 | [0007](0007-local-authentication-with-a-mock-oidc-issuer.md) | Local authentication with a mock OIDC issuer | Accepted |
 | [0008](0008-the-dataset-and-its-mapping.md) | The dataset and its mapping | Accepted |
 | [0009](0009-s4s-subscription-path.md) | S4's subscription path | Accepted |
+| [0010](0010-the-graph-model-and-vocabulary.md) | The graph model and vocabulary | Proposed |
+| [0011](0011-our-container-images.md) | Our container images | Proposed |
+| [0012](0012-the-demo-tool.md) | The demo tool | Proposed |

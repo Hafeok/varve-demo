@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    varve-demo, the demo's one command (ADR 0012): the snapshot builder, the
+    importer compose starts (ADR 0011's image publishes it as Native AOT), and
+    the steps a viewer runs. A .NET tool, packable; published to nuget.org only
+    from the demo's first release.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>VarveDemo.Tool</RootNamespace>
+    <AssemblyName>varve-demo</AssemblyName>
+    <Version>0.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>varve-demo</ToolCommandName>
+    <PackageId>VarveDemo.Tool</PackageId>
+    <Authors>Emil Okkels Klein</Authors>
+    <Description>The varve-demo command: build and import the NuGet catalog snapshot into Varve, and ask it the demo's questions.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../VarveDemo.Steps/VarveDemo.Steps.csproj" />
+  </ItemGroup>
+
+  <!-- The pinned snapshot travels with the tool, so every copy verifies the
+       same bytes (ADR 0008). -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../snapshot/manifest.json" LogicalName="snapshot/manifest.json" Condition="Exists('../../snapshot/manifest.json')" />
+    <EmbeddedResource Include="../../snapshot/ids.txt" LogicalName="snapshot/ids.txt" Condition="Exists('../../snapshot/ids.txt')" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,64 @@
+{
+  "interactiveLogin": false,
+  "httpServer": "NettyWrapper",
+  "tokenCallbacks": [
+    {
+      "issuerId": "varve-demo",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "client_id",
+          "match": "varve-demo-operator",
+          "claims": {
+            "sub": "varve-demo-operator",
+            "aud": [
+              "api://varve-manage"
+            ],
+            "roles": [
+              "varve-demo.operator"
+            ]
+          }
+        },
+        {
+          "requestParam": "client_id",
+          "match": "varve-demo-checkpointer",
+          "claims": {
+            "sub": "varve-demo-checkpointer",
+            "aud": [
+              "api://varve-manage"
+            ],
+            "roles": [
+              "varve-demo.checkpointer"
+            ]
+          }
+        },
+        {
+          "requestParam": "client_id",
+          "match": "varve-demo-importer",
+          "claims": {
+            "sub": "varve-demo-importer",
+            "aud": [
+              "api://varve-demo"
+            ],
+            "roles": [
+              "varve-demo.importer"
+            ]
+          }
+        },
+        {
+          "requestParam": "client_id",
+          "match": "varve-demo-viewer",
+          "claims": {
+            "sub": "varve-demo-viewer",
+            "aud": [
+              "api://varve-demo"
+            ],
+            "roles": [
+              "varve-demo.viewer"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
