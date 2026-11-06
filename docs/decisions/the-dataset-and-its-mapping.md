@@ -25,10 +25,16 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: SnapshotIsBaseAndWindowHashed
     statement: "A snapshot is a base, the latest leaf before T0 of every version of the N packages, and the leaves of the retained catalog commits from T0 to its upper bound, each projected as ADR 0010 says, with a manifest of N, the bounds, the base's and the window's counts and hashes, and the tool version, built by CI, published as a release asset and verified by hash"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: BaseAtTheWindowsLowerBound
     statement: "The window's lower bound T0 is chosen to keep S1's target with the base loaded; the first deprecation and vulnerability data in the catalog are recorded from the catalog, and import --since replays history from any date, measured and documented, never in the step checks"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: BaseThenFullReplayOverHttp
     statement: "S1 loads the base over HTTP as the importer, one Varve commit per package with a base-state assertion as of T0 in the catalog log, then replays every retained catalog commit of the window, one Varve commit each, with no bulk load"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
 ---
 
 The rulings of [ADR 0008](../adr/0008-the-dataset-and-its-mapping.md), filed by session 01 of #1 on

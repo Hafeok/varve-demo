@@ -45,6 +45,8 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: ImporterTakesCheckpointsAsDatasetAdmin
     statement: "The importer takes the checkpoints with POST /manage/datasets/name/checkpoints through varve-demo-checkpointer, which holds admin on the dataset alone, and S3's screen says the importer takes them and why"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
 ---
 
 The rulings of [ADR 0004](../adr/0004-the-time-travel-clock.md), filed by session 01 of #1 on

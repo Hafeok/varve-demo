@@ -5,26 +5,48 @@ adr: 0010
 decisions:
   - key: CatalogTermsAsVarveJsonLdExpandsThem
     statement: "A leaf's quads are what Varve.JsonLd produces from it with its own context, with no renaming and no term of ours in their place"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: LeafQuadsInItsVersionGraph
     statement: "The importer writes every quad of a leaf into the leaf's version graph, with blank node labels made unique per leaf within an update"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: DerivedTermsInAUrnNamespace
     statement: "Terms the demo derives live in urn:varve-demo:term:, an unregistered URN namespace the README names as such, never in an unregistered w3id.org namespace"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: CatalogLogUsesCatalogTerms
     statement: "Each retained catalog commit is urn:varve-demo:catalog-commit:commitId in urn:varve-demo:catalog-log with catalog:commitId and catalog:commitTimeStamp"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: SortableVersionKey
     statement: "The importer asserts urn:varve-demo:term:versionKey on each leaf, a string whose code-point order is NuGet's SemVer 2.0 version order, computed by the importer"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: OracleOrdersWithNuGetVersioning
     statement: "The S2 oracle orders versions with NuGet.Versioning, a test-only package, and CI checks that it and the version key agree on every version in the snapshot"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: NoOtherDerivedData
     statement: "Deprecation, vulnerability, listing and prerelease status are read by queries from the catalog's own terms, never from a derived flag"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: LeafProjectedToWhatTheStepsRead
     statement: "Every leaf is read whole by Varve.JsonLd and the store keeps only the catalog's advisory state: id, version, listed, deprecation with reasons and alternate package and range, vulnerabilities with advisory URL and severity, and the version key; base leaves may be stored pruned to those members by the rule the manifest records, and the oracle reads the same fields"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: BaseStateInTheCatalogLog
     statement: "Each base commit asserts urn:varve-demo:base:id in urn:varve-demo:catalog-log with vd:basePackage and vd:baseAsOf T0, so the time index places the base at T0"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: PackageIdForLookup
     statement: "The importer asserts urn:varve-demo:term:packageId, the package id lower-cased, on each leaf, so a query finds a package's versions by index; it is identity, not a derived flag"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: QueryReturnsToValuesWhenVarveFixes228
     statement: "S2's query asks one block per locked package with constants, joined by UNION, because of Hafeok/Varve#228; the bump that adopts Varve's fix returns it to one block with VALUES"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
 ---
 
 The rulings of [ADR 0010](../adr/0010-the-graph-model-and-vocabulary.md), filed

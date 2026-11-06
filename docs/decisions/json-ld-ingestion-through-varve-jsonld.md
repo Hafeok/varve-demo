@@ -17,6 +17,8 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: InlineContextsOnly
     statement: "Leaves carry their context inline; the snapshot records no context documents, and the DocumentLoader refuses every remote context, so a leaf naming one fails the build or the import and is never fetched"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:49:23Z
 ---
 
 The rulings of [ADR 0006](../adr/0006-json-ld-ingestion-through-varve-jsonld.md), filed by session 01 of #1 on

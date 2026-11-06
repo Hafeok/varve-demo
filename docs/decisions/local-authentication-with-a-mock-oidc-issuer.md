@@ -25,8 +25,12 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: CheckpointsByADatasetAdminClient
     statement: "Checkpoints are taken by varve-demo-checkpointer, which holds admin on the dataset alone with management-audience tokens; the bootstrap operator is used only by a one-shot setup service"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
   - key: OperatorOnlyCreatesTheDataset
     statement: "The operator client is a bootstrap operator on the management audience, used once by a one-shot setup service to apply the dataset and its grants, and by no long-running service"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T13:17:23Z
 ---
 
 The rulings of [ADR 0007](../adr/0007-local-authentication-with-a-mock-oidc-issuer.md), filed by session 01 of #1 on
