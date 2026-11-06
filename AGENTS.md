@@ -74,7 +74,11 @@ also a decision set in `docs/decisions/` (namespace `varvedemo`, format in
 - **Never suppress a `DD` finding**: no `#pragma`, no `[SuppressMessage]`, no
   `.editorconfig` downgrade, no `NoWarn`.
 - **A new decision is filed unaccepted.** Citing it is `CS0618` until the
-  maintainer adds `accepted-by`. **A session never writes `accepted-by`.**
+  maintainer adds `accepted-by`. **A session never writes `accepted-by` for a
+  decision it filed.** A later session may transcribe an acceptance only at
+  the maintainer's explicit instruction, with his identity and timestamp, and
+  its traceability record quotes the instruction and says it transcribed
+  (ADR 0001, amendment of 2026-11-03, proposed).
 - **An accepted ADR is never edited.** It changes by a dated amendment or a
   supersession (ADR 0001).
 - A finding about the analyzers themselves is an issue in their repository,
@@ -129,7 +133,8 @@ dotnet test --solution VarveDemo.slnx -c Release   # the gates are tests
   review".
 - A version taken from memory, a `.csproj` that pins its own version, or a
   dependency without an ADR.
-- A suppressed `DD` finding, an `accepted-by` written by a session, or an edited
+- A suppressed `DD` finding, an `accepted-by` written for a decision the
+  session filed or without the maintainer's explicit instruction, or an edited
   accepted ADR.
 - A `.cs` file without the MPL-2.0 Exhibit A notice.
 - A gap in Varve worked around instead of shown, with its Varve issue linked.

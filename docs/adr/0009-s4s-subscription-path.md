@@ -127,3 +127,15 @@ part, not the combination.
   test of a pattern-filtered feed resuming across a restart that either
   repository has.
 - When `FollowAsync` gains a pattern, the client goes.
+
+## Amendment, 2026-11-03: re-checked against `v0.1.0-preview.15`, and filed
+
+Filed unaccepted by session 03, on #3, the bump to `0.1.0-preview.15`.
+Every file this ADR cites is unchanged between `v0.1.0-preview.11` and
+`v0.1.0-preview.15`: `FollowOptions.cs`, `Follow.cs`, `CommitsEndpoint.cs`,
+`Ranges.cs`, `FeedFilter.cs`, `SubscriptionFilter.cs`, `change-feed.md`, and
+the three test files. The source and test findings hold at the same lines.
+
+Point 4's convenience issue, a pattern on `FollowAsync` with its resumption
+tested, is filed as
+[Hafeok/Varve#160](https://github.com/Hafeok/Varve/issues/160).

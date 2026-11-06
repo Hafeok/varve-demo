@@ -63,8 +63,11 @@ one fails; it is never relaxed to pass.
 
 ### Facts about Varve the criteria rest on
 
-Checked against Varve's repository at `v0.1.0-preview.11` on 2026-10-23. A bump
-re-checks them.
+Checked against Varve's repository at `v0.1.0-preview.11` on 2026-10-23, and
+again at `v0.1.0-preview.15` on 2026-11-03 (#3): every fact below holds at
+preview.15. Preview.15 makes an as-of read inside an extent set seek rather
+than narrow the set (Varve ADR 0177), which changes its cost and not F3's
+distance rule. A bump re-checks them.
 
 - **F1.** Over HTTP a write request is **at most one commit**: none when its
   net effect is empty (Varve ADR 0094, ADR 0057).
@@ -83,7 +86,9 @@ re-checks them.
   ADR 0114). The server takes no checkpoints by policy; an operator takes them
   on demand with `POST /manage/datasets/{name}/checkpoints`. A dataset's
   checkpoints are listed by `GET /manage/datasets/{name}/status`. Both need
-  `admin` on the dataset (demo ADRs 0004, 0007).
+  `admin` on the dataset (demo ADRs 0004, 0007). Varve's operator guide
+  describes the bound as a distance below the head
+  ([Hafeok/Varve#161](https://github.com/Hafeok/Varve/issues/161)).
 - **F4.** The sequencer assigns commit timestamps as `max(clock, head's)`, and
   no request supplies one. Over HTTP the commit's cause is the server-minted
   request id, and no header sets it or any other commit metadata.
@@ -101,7 +106,8 @@ re-checks them.
   what `derived/` claims to hold (the newest checkpoint or persisted
   projection); a body below it is checked only when a later read needs it
   (Varve's `Log.cs`; citations in the traceability record of #1). No public
-  command, API or route verifies the whole chain on demand.
+  command, API or route verifies the whole chain on demand
+  ([Hafeok/Varve#158](https://github.com/Hafeok/Varve/issues/158)).
 - **F7.** Bulk load is one logical commit, embedded only (`varve load` over a
   directory, Varve ADR 0105), and records no agent; the server has no
   bulk-load endpoint. The demo does not use it: S1 is a full replay over HTTP
@@ -229,8 +235,8 @@ added and removed, grouped by package version.
    `POST /manage/datasets/{name}/checkpoints` through the operator client, as
    Varve's operator guide documents (ADR 0004). The screen says the importer
    takes them, as the operator, and why, with the Varve issue linked. When
-   Varve ships a server-side policy, the importer stops. *Varve issue to file:
-   "a checkpoint policy configurable on the server".*
+   Varve ships a server-side policy, the importer stops. Varve issue:
+   [Hafeok/Varve#159](https://github.com/Hafeok/Varve/issues/159).
 8. The diff between two positions comes from Varve's diff over the protocol and
    equals the set difference of two as-of reads of the same graphs.
 9. Because a details leaf replaces its version's graph (ADR 0008), a diff shows
@@ -324,8 +330,7 @@ counter shows how many cycles have run. It repeats on demand.
    can see today. The screen says exactly what that open checked: every
    header, and bodies only above the newest checkpoint. **Verifying the whole
    chain, bodies included, on demand** is a gap (F6): S6 shows it with its
-   Varve issue linked. *Varve issue to file: "verify a dataset's hash chain on
-   demand".*
+   Varve issue linked: [Hafeok/Varve#158](https://github.com/Hafeok/Varve/issues/158).
 4. Every acknowledged commit is present: the head is at or above the highest
    acknowledged position, and an as-of read at each acknowledged position finds
    that commit's quads. An in-doubt commit is reported as present or absent,
@@ -394,10 +399,25 @@ Varve version, the hardware, and the dataset.
 
 ## Varve issues this specification depends on
 
-To be filed against Varve, each with a reproduction (C6):
+Filed against Varve by the maintainer, each with a reproduction (C6):
 
-1. **As-of by a declared domain clock** (ADR 0004; S3).
-2. **Verify a dataset's hash chain on demand** (F6; S6).
-3. **A checkpoint policy configurable on the server** (F3, ADR 0004; S3).
-4. **A pattern filter on `FollowAsync`**: a convenience, not a gap S4 shows
-   (F5, ADR 0009; S4).
+1. **As-of by a declared domain clock**
+   ([Hafeok/Varve#157](https://github.com/Hafeok/Varve/issues/157); ADR 0004;
+   S3).
+2. **Verify the log end to end on demand**
+   ([Hafeok/Varve#158](https://github.com/Hafeok/Varve/issues/158); F6; S6).
+3. **A checkpoint policy in server configuration**
+   ([Hafeok/Varve#159](https://github.com/Hafeok/Varve/issues/159); F3,
+   ADR 0004; S3).
+4. **A pattern on `FollowAsync`, and its resumption tested**: a convenience,
+   not a gap S4 shows
+   ([Hafeok/Varve#160](https://github.com/Hafeok/Varve/issues/160); F5,
+   ADR 0009; S4).
+5. **The operator guide's description of `MaxAsOfDistance`**
+   ([Hafeok/Varve#161](https://github.com/Hafeok/Varve/issues/161); F3).
+6. **Under OIDC, a write whose token yields no agent**
+   ([Hafeok/Varve#162](https://github.com/Hafeok/Varve/issues/162);
+   ADR 0007; S1, S6).
+
+A new gap is drafted in the session's traceability record, and the
+maintainer files it.

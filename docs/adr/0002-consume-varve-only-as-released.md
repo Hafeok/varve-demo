@@ -87,3 +87,21 @@ The latest release on 2026-10-23 is `0.1.0-preview.11` (nuget.org, published
 - `nuget.config` makes adding any non-nuget.org package an ADR, deliberately.
 - The register carries Varve packages before any project references them; the
   pin has one place from the first commit.
+
+## Amendment, 2026-11-03: the pin is `0.1.0-preview.15`
+
+Filed unaccepted by session 03, on #3, the bump to `0.1.0-preview.15`.
+Point 4's "`0.1.0-preview.11` today" and the Context's image index describe
+the pin as it was set on 2026-10-23. Resolved again on 2026-11-03:
+
+- nuget.org's latest Varve release is `0.1.0-preview.15`, published
+  2026-10-26, for every package the register lists (`Varve.Protocol.Client`,
+  `Varve.JsonLd`, `Varve.Delta`), and for `Varve.Store.Browser`. Its nuspec
+  `authors` is still `decision-driven-design`.
+- Its server image index is
+  `ghcr.io/hafeok/varve:v0.1.0-preview.15@sha256:f3c1651a11256d35be1330b82d207a9d8b50ff1f39fb61b2ac059087d592d706`.
+- Varve's `publish.yml` at `v0.1.0-preview.15` still publishes the image under
+  the release tag with build provenance; between the two tags it changed only
+  in how it keeps test results.
+
+The rule is unchanged; only the value it names moved.
