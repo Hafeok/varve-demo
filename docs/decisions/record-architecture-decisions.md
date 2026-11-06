@@ -25,6 +25,8 @@ decisions:
     accepted-at: 2026-10-26T11:49:23Z
   - key: AcceptanceTranscribedOnlyOnInstruction
     statement: "A session never writes accepted-by for a decision it filed; another session may transcribe an acceptance only at the maintainer's explicit instruction, with his identity and timestamp, recorded in its traceability record"
+    accepted-by: mailto:emil@okkels-klein.dk
+    accepted-at: 2026-11-06T11:49:23Z
 ---
 
 The rulings of [ADR 0001](../adr/0001-record-architecture-decisions.md), filed by session 01 of #1 on
