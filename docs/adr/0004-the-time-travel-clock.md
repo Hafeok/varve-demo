@@ -336,9 +336,14 @@ on disk is safe: no acknowledged commit was lost in any run.
 **So checkpoints during the import are not proposed.** They were the remedy
 the ruling named. They were measured not to bound the importing process's
 memory, so adding them would cost import time for nothing S1 needs. Point 6
-stands unchanged. The finding is a Varve issue draft, in the slice's
-traceability record, with these numbers and the reproduction.
-`ImportUnderAMemoryLimit` keeps measuring it in CI, and fails only if an
-acknowledged commit is lost. The importer keeps
+stands unchanged. The finding is
+[Hafeok/Varve#227](https://github.com/Hafeok/Varve/issues/227), filed from the
+slice's draft with these numbers and the reproduction, and the limitation is
+on the evidence page's "not yet proven" list with #227. What the measurements
+do show is a safety property, and CI tests it:
+`UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost`. A
+write that does not fit is refused cleanly, as an HTTP problem and never a
+crash, and every commit acknowledged before the refusal is there after a
+restart. The importer keeps
 `VarveDemo:Checkpoints:ForMemoryEveryCommits`, 0 by default, so the
 measurement can be repeated on a later Varve.

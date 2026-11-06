@@ -191,5 +191,17 @@ and the query finds a package's versions by that literal. It is identity,
 like the graph name it mirrors, not a flag on the catalog's state, so point 7
 stands. With it, S2's query answers in 117 ms to 154 ms on the full base.
 
-Its rulings are `LeafProjectedToWhatTheStepsRead`, `BaseStateInTheCatalogLog`
-and `PackageIdForLookup`, filed unaccepted.
+**S2's query asks per package, with constants.** With the package id bound
+by `VALUES`, Varve's planner starts from `nuget:listed true`, about 516 000
+matches, rather than from the bound id. That took 1.9 s to 4.4 s for the
+lookup alone and 14 s to 27 s for S2. With the id and the graph as constants,
+the lookup takes 2.7 ms and S2 22 ms to 154 ms. So `deps.rq` holds one block
+per locked package, which the tool fills with each package's constants and
+joins with `UNION`, and the file and the printed query link
+[Hafeok/Varve#228](https://github.com/Hafeok/Varve/issues/228). **When Varve
+fixes #228, the bump that adopts the fix returns the query to one block with
+`VALUES`**, and amends this ADR to say so.
+
+Its rulings are `LeafProjectedToWhatTheStepsRead`, `BaseStateInTheCatalogLog`,
+`PackageIdForLookup` and `QueryReturnsToValuesWhenVarveFixes228`, filed
+unaccepted.

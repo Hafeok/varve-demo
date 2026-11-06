@@ -31,16 +31,24 @@ append-only log, the NuGet catalog:
 
 Every other step is `pending`.
 
-**Memory.** Measured in the same CI run:
+**Memory.** S1 needs about 1.6 GB of resident memory, measured with
+`docker top` during a local run:
 
-- **Without a limit:** the server's resident memory reached 963 MB after the
-  final checkpoint, and went back to 125 MB after a restart.
-- **Under a 512 MB limit:** the import is refused part-way, and nothing
-  acknowledged is lost.
+| Container | Peak resident memory |
+|---|---|
+| Varve server | about 1.0 GB (963 MB in CI, after the final checkpoint) |
+| importer | 388 MB |
+| mock issuer | 201 MB |
 
-The numbers and a Varve issue draft are in
-[ADR 0004](docs/adr/0004-the-time-travel-clock.md)'s amendment. Give Docker
-at least 2 GB.
+Counting the page cache the snapshot fills, Docker reports about 3.2 GB.
+Docker's default memory allowance on some machines is below this, so give
+Docker at least 2 GB, and 4 GB to be comfortable.
+
+Under a 512 MB limit on the server, the import is refused part-way and the
+dataset does not reopen under that limit
+([Hafeok/Varve#227](https://github.com/Hafeok/Varve/issues/227)). What CI
+proves is the safety property: the refusal is clean, and nothing
+acknowledged is lost.
 
 ## Run it
 
@@ -123,6 +131,13 @@ repository's CI. Its base is the chiseled .NET `runtime-deps` image from MCR,
 the same exception Varve's own image makes
 ([ADR 0011](docs/adr/0011-our-container-images.md)). A clean machine can pull
 it only once the package is public on GHCR.
+
+**The importer's pin, for now.** Until the first publish from `main`,
+`compose.yaml` pins the importer at a pull request's build
+(`pr-c886d5f…`, attested and verified in CI). After that, every publish from
+`main` opens a pull request that moves the pin to the image it published
+([ADR 0011](docs/adr/0011-our-container-images.md), amendment of
+2026-11-06).
 
 ## The script
 
