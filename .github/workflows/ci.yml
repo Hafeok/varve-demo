@@ -61,6 +61,9 @@ jobs:
   steps:
     name: steps (S1, S2)
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+      image-digest: ${{ steps.image.outputs.digest }}
     timeout-minutes: 75
     permissions:
       contents: read
@@ -222,10 +225,10 @@ jobs:
           $mount
           EOF
           cat "$RUNNER_TEMP/compose.ci.yaml"
-          # CI only: the server held to 512 MB, for ImportUnderAMemoryLimit.
+          # CI only: the server held to 512 MB, for the safety check under memory pressure.
           printf 'services:\n  varve:\n    mem_limit: 512m\n    memswap_limit: 512m\n' > "$RUNNER_TEMP/compose.memory.yaml"
 
-      - name: S1_ZeroToQuery, S2_DeprecatedAndVulnerableDependencies, and the import under 512 MB
+      - name: S1_ZeroToQuery, S2_DeprecatedAndVulnerableDependencies, and refusal under memory pressure
         env:
           VARVE_DEMO_STEPS: "1"
           # compose.yaml's importer image, overridden with this run's push, by digest.
@@ -237,7 +240,7 @@ jobs:
           VARVE_DEMO_MEMORY_OVERRIDE: ${{ runner.temp }}/compose.memory.yaml
         run: >-
           dotnet test --project tests/VarveDemo.Steps.Tests -c Release --no-build
-          --filter-method "*S1_ZeroToQuery" --filter-method "*S2_DeprecatedAndVulnerableDependencies" --filter-method "*ImportUnderAMemoryLimit"
+          --filter-method "*S1_ZeroToQuery" --filter-method "*S2_DeprecatedAndVulnerableDependencies" --filter-method "*UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost"
           --report-trx --results-directory "${{ github.workspace }}/TestResults"
 
       - name: The stack's logs
@@ -264,3 +267,53 @@ jobs:
             ${{ runner.temp }}/results
             TestResults/**/*.trx
           if-no-files-found: warn
+
+  # ADR 0011's amendment of 2026-11-06: every publish from main opens a pull
+  # request that moves compose.yaml's importer pin to the image just pushed,
+  # attested and verified. A person merges it; a push that changed only
+  # compose.yaml (a merged re-pin) opens none.
+  repin:
+    name: re-pin compose.yaml to the published importer
+    needs: steps
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE: ghcr.io/hafeok/varve-demo-importer:${{ needs.steps.outputs.image-tag }}@${{ needs.steps.outputs.image-digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Open the re-pin pull request
+        run: |
+          if [ "$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null)" = "compose.yaml" ]; then
+            echo "This push changed only compose.yaml: no re-pin." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 - "$IMAGE" <<'PY'
+          import re, sys
+          path = "compose.yaml"
+          text = open(path).read()
+          new, n = re.subn(r"\$\{VARVE_DEMO_IMPORTER_IMAGE:-[^}]*\}", "${VARVE_DEMO_IMPORTER_IMAGE:-" + sys.argv[1] + "}", text)
+          if n != 1:
+              sys.exit("compose.yaml has " + str(n) + " importer image defaults, not 1.")
+          open(path, "w").write(new)
+          PY
+          if git diff --quiet; then
+            echo "compose.yaml already names $IMAGE." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="repin/importer-${{ github.sha }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "build(compose): re-pin the importer to ${{ needs.steps.outputs.image-tag }}" -m "Published, attested and verified by ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (ADR 0011's amendment of 2026-11-06)."
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "build(compose): re-pin the importer to ${{ needs.steps.outputs.image-tag }}" \
+            --body "Moves compose.yaml's importer pin to \`$IMAGE\`, which [run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) pushed, attested and verified, with every step check passing against it (ADR 0011's amendment of 2026-11-06). Opened by the workflow token, so GitHub starts no CI run for it: use Update branch, or close and reopen, to run CI here."

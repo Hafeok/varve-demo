@@ -17,8 +17,13 @@ decisions:
     statement: "A push to main publishes main-sha; every image CI pushes is attested with build provenance and verified before a step uses it, as ADR 0002 requires for Varve's"
   - key: ComposePinMovesInItsOwnCommit
     statement: "compose.yaml names our image by tag and digest, and the digest moves in a commit of its own after an image is published"
+  - key: PublishOnMainOpensARepinPullRequest
+    statement: "Every publish of an image from main opens a pull request that re-pins compose.yaml's digest to it; a person merges it, and a push changing only compose.yaml opens none"
 ---
 
 The rulings of [ADR 0011](../adr/0011-our-container-images.md), filed
 unaccepted by session 03 on #5, 2026-11-03. Every citation is `CS0618` until
 the maintainer accepts them.
+
+`PublishOnMainOpensARepinPullRequest` is the 2026-11-06 amendment's ruling,
+filed unaccepted by session 03 on #5.

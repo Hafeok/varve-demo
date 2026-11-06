@@ -96,3 +96,47 @@ file and Dockerfile.
   that a clean machine needs it to be.
 - The gate grows an allow-list of one name and one directory, with a test
   that the allowance is no wider.
+
+## Amendment, 2026-11-06: how compose.yaml's pin moves to what main publishes
+
+Filed unaccepted by session 03, on #5, at the maintainer's ruling 7 of
+2026-11-06.
+
+**The interim pin.** Until the first publish from `main`, `compose.yaml`
+names the importer at slice 1a's pull request build,
+`pr-c886d5f…@sha256:13179a8d…`. CI attested and verified that image, and the
+README says this pin is interim. Point 7 allowed it.
+
+**The decision: every publish from `main` opens a pull request that re-pins
+the digest.**
+
+1. **The job.** After the steps job on a push to `main` has pushed,
+   attested and verified `main-<sha>`, a `repin` job replaces the default in
+   `compose.yaml`'s `${VARVE_DEMO_IMPORTER_IMAGE:-…}` with
+   `ghcr.io/hafeok/varve-demo-importer:main-<sha>@<digest>`.
+2. **The pull request.** It commits that one change on a branch
+   `repin/importer-<sha>` and opens a pull request titled
+   `build(compose): re-pin the importer to main-<sha>`, citing the run that
+   published and verified the image. A person merges it. Nothing on `main`
+   moves without review.
+3. **No loop.** A push to `main` whose only change is `compose.yaml` opens no
+   re-pin, so merging a re-pin pull request does not ask for another.
+4. **Two settings it needs.** The workflow token must be allowed to create
+   pull requests (the repository setting "Allow GitHub Actions to create and
+   approve pull requests"). And GitHub does not start workflows for a pull
+   request the workflow token opens, so the re-pin pull request carries no CI
+   run of its own. Its one change is a digest the publishing run verified, by
+   attestation, with every step check passing against it. The maintainer can
+   start CI on it with "Update branch" or by closing and reopening it.
+
+**Alternatives considered.**
+
+- **The job pushes the new pin to `main` itself.** Rejected: `main` would
+  move without review, and with branch protection the push would be refused.
+- **`compose.yaml` names a moving tag (`main`) without a digest.** Rejected
+  by ADR 0003 point 8: every image is pinned by digest.
+- **Re-pin by hand after each publish.** Rejected: it is the step most likely
+  to be forgotten, and a stale pin would run a viewer on an older image than
+  the steps passed against.
+
+Its ruling is `PublishOnMainOpensARepinPullRequest`, filed unaccepted.
