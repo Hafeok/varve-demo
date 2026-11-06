@@ -58,6 +58,24 @@ Hold the full local import with the base. At 512 390 versions and the window's ~
 Then carry on as planned. Report back with the projection, the snapshot size, the memory-limit result, and anything you disagree with.
 `````
 
+`````markdown
+Rulings on your report. Varve issues filed from your drafts: Hafeok/Varve#227 (memory under a limit, checkpoint not releasing it, reopen) and Hafeok/Varve#228 (VALUES not driving join order). Link them where your drafts were cited, and remove the drafts' "to file" status in the traceability record.
+
+1. ImportUnderAMemoryLimit stays green: it tests a safety property (a clean refusal under memory pressure, nothing acknowledged lost), and that is evidence. Name and document it as that property. The limitation goes on the evidence page's "not yet proven" list with #227. The README states the memory S1 needs as measured (the server's peak, plus the other containers), and that Docker's default allowance on some machines is below it.
+
+2. vd:packageId: keep it, and record it in ADR 0010's amendment with the measured reason.
+
+3. S2's UNION of constants: keep it. deps.rq's comment and the query as printed on screen link #228. ADR 0010 (or the spec's S2) states that when Varve fixes it, the query returns to VALUES in the bump that adopts the fix.
+
+4, 5 and 6: accepted as you did them.
+
+7. compose.yaml pins the importer at a pull request's tag. That is acceptable for this PR as an interim pin, stated in the README. Amend ADR 0011 to decide how compose.yaml on main moves to the image main publishes. Preferred: the publish job on main opens a small pull request that re-pins the digest. Implement it if it fits in this PR; otherwise file the issue in varve-demo and link it.
+
+8. Varve 0.1.0-preview.16 is out. Do not bump in this PR; the next session does.
+
+Emil merges #4 next. Then rebase #6 onto main, re-run CI, and report back with the green run's S1 and S2 numbers and anything you disagree with. Emil then accepts #6's ADRs and merges it; snapshot-release and making the importer package public follow.
+`````
+
 ## Report
 
 Slice 1a, finished on the maintainer's rulings above.
@@ -131,7 +149,9 @@ replayed in 28.7 min, and a 122 s checkpoint. The server peaked at 4.5 GB.
    measured not to change where it fails, so they are not proposed. The
    importer keeps the option, off by default, so the measurement can be
    repeated.
-2. **`ImportUnderAMemoryLimit` passes while the import is refused.** It
+2. **The memory check passes while the import is refused** (accepted by the
+   maintainer, and renamed for the property it tests:
+   `UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost`). It
    records the refusal and fails only if an acknowledged commit is lost. A
    red check for a Varve limit the demo shows would block every pull request.
    The maintainer may prefer it red.
@@ -185,13 +205,16 @@ Microsoft.Extensions.Logging 10.0.14, System.Text.Json 10.0.14 and Polly
 8.9.0. Newtonsoft.Json 13.0.1 is in the top 3 000 with no leaf in the
 window. Varve.JsonLd 0.1.0-preview.15 is not in the top 3 000.
 
-### Varve issue drafts
+### Varve issues, filed from this session's drafts
 
-Drafts only: the planning chat files them. None links Varve#222, which
+Filed by the maintainer on 2026-11-06 as
+[Hafeok/Varve#227](https://github.com/Hafeok/Varve/issues/227) and
+[Hafeok/Varve#228](https://github.com/Hafeok/Varve/issues/228); the drafts
+are kept below as they were filed. Neither links Varve#222, which
 measures about 36 bytes a commit and is a different thing (the maintainer's
 ruling 3).
 
-#### 1. Under a memory limit the server refuses writes, and cannot reopen the dataset under the same limit; a checkpoint does not release memory
+#### 1. Filed as Hafeok/Varve#227: under a memory limit the server refuses writes, and cannot reopen the dataset under the same limit; a checkpoint does not release memory
 
 **Version.** Varve `0.1.0-preview.15`, image
 `ghcr.io/hafeok/varve:v0.1.0-preview.15@sha256:f3c1651a…d706`, one `File`
@@ -245,9 +268,11 @@ unnecessary.
 
 **Why it matters to the demo.** S1 on a viewer's machine needs more than
 1 GB for the server alone. The demo records this as a measured fact
-(`ImportUnderAMemoryLimit` in CI); it does not work around it.
+(in CI, as the safety property
+`UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost`);
+it does not work around it.
 
-#### 2. A `VALUES` binding does not drive an index lookup; a constant-object pattern is chosen first instead
+#### 2. Filed as Hafeok/Varve#228: a `VALUES` binding does not drive an index lookup; a constant-object pattern is chosen first instead
 
 **Version.** Varve `0.1.0-preview.15`, the dataset of S1 (515 772 graphs;
 each version's leaf has `<urn:varve-demo:term:packageId>` and
@@ -283,3 +308,32 @@ join, or a statistics-based choice that sees it is selective.
 
 **Not a Varve issue: the oracle.** It is the demo's own and shares no code
 with Varve.
+
+### After the third rulings (2026-11-06)
+
+- **Varve issues linked.** #227 is linked from:
+  - ADR 0004's amendment;
+  - the spec's list of Varve issues and its "not yet proven" seed for the
+    evidence page;
+  - the README.
+
+  #228 is linked from `deps.rq` (so from the query as printed), ADR 0010's
+  amendment and the spec's S2.
+- **The memory check is renamed** for the safety property it tests.
+- **The README states S1's memory, measured with `docker top` during a local
+  run:**
+  - the server about 1.0 GB (963 MB in CI);
+  - the importer 388 MB;
+  - the issuer 201 MB;
+  - about 1.6 GB resident in all, and about 3.2 GB with the page cache
+    Docker counts.
+- **ADR 0010's amendment** records `vd:packageId` with its measured reason,
+  and that the query returns to `VALUES` in the bump that adopts #228's fix
+  (ruling `QueryReturnsToValuesWhenVarveFixes228`).
+- **ADR 0011's amendment of 2026-11-06:** every publish from `main` opens a
+  pull request re-pinning `compose.yaml`. Implemented as the `repin` job. It
+  needs the repository setting "Allow GitHub Actions to create and approve
+  pull requests", and its pull requests carry no CI run of their own, since
+  GitHub does not start workflows for the workflow token's pull requests.
+  The README states the interim pin.
+- **Not bumped to `0.1.0-preview.16`**, as ruled.
