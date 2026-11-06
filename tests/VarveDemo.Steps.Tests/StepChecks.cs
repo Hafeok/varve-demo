@@ -251,15 +251,18 @@ public sealed partial class StepChecks
     }
 
     /// <summary>
-    /// The import under a 512 MB limit on the server (the review's ruling 3):
-    /// a CI-only compose override, never the viewer's compose, sets
-    /// <c>mem_limit</c>; the tool imports the snapshot; the run records whether
-    /// it completed, the server's peak resident memory, and whether the
-    /// container was killed. Not a step of the script: evidence about the
-    /// server's memory, for the evidence page.
+    /// A safety property under memory pressure: with the server held to
+    /// 512 MB (a CI-only compose override, never the viewer's compose), an
+    /// import that does not fit is refused cleanly, as an HTTP problem, never a
+    /// crash, and nothing acknowledged before the refusal is lost. After a
+    /// restart, every acknowledged commit is there. The check passes when that
+    /// holds, whether or not the import fit, and records where it was refused,
+    /// the server's peak memory, and whether it reopened under the limit. The
+    /// limitation itself is Hafeok/Varve#227, on the evidence page's "not yet
+    /// proven" list. Not a step of the script.
     /// </summary>
     [Fact]
-    public async Task ImportUnderAMemoryLimit()
+    public async Task UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost()
     {
         Stack.RequireSteps();
         string? limited = Environment.GetEnvironmentVariable("VARVE_DEMO_MEMORY_OVERRIDE");
@@ -295,7 +298,7 @@ public sealed partial class StepChecks
             ProcessResult result = await import;
             string printed = result.Output + result.Error;
             ProcessResult state = await Stack.RunAsync("docker", "inspect varve-demo-varve-1 --format {{.State.OOMKilled}}/{{.RestartCount}}", TimeSpan.FromSeconds(30));
-            MeasurementReport report = new MeasurementReport("ImportUnderAMemoryLimit")
+            MeasurementReport report = new MeasurementReport("UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost")
                 .Fact("snapshotSha256", manifest.Sha256)
                 .Fact("serverOomKilledAndRestarts", state.Output.Trim())
                 .Fact("importExit", result.ExitCode.ToString(CultureInfo.InvariantCulture))
@@ -343,12 +346,12 @@ public sealed partial class StepChecks
                 SelectAnswer count = await SparqlSelect.RunAsync(server.Client(viewer, TimeSpan.FromMinutes(1)), SparqlSelect.Load("catalog-commits.rq"), TestContext.Current.CancellationToken);
                 report.Add(new Measurement("serverResidentKiBReopenedWithoutLimit", await Stack.ServerResidentKiBAsync(), "KiB"))
                     .Add(new Measurement("headAfterRestart", count.Position, "position", acknowledged, "equal"));
-                report.Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
+                report.Write(Path.Combine(Stack.ResultsDirectory, "UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost.json"), DateTimeOffset.UtcNow);
                 Assert.Equal(acknowledged, count.Position);
             }
             else
             {
-                report.Write(Path.Combine(Stack.ResultsDirectory, "ImportUnderAMemoryLimit.json"), DateTimeOffset.UtcNow);
+                report.Write(Path.Combine(Stack.ResultsDirectory, "UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost.json"), DateTimeOffset.UtcNow);
             }
         }
         finally

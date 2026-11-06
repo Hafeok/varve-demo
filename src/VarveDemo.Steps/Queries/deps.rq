@@ -6,7 +6,8 @@
 # version's graph (ADR 0008 point 4). The blocks are joined by UNION. As
 # written here, the file is the query for one package. Constants, not
 # VALUES: Varve's planner drives the index from a constant and not from a
-# VALUES binding (a draft Varve issue in the slice's traceability record).
+# VALUES binding, https://github.com/Hafeok/Varve/issues/228. The bump that
+# adopts its fix returns this query to one block with VALUES (ADR 0010).
 #
 # Terms are the catalog's own (ADR 0010). vd:versionKey orders versions as
 # NuGet does, and has a "-" exactly for a prerelease; vd:packageId is the id
