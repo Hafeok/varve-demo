@@ -19,6 +19,12 @@ public sealed partial class ConfigurationGates
 
     private static readonly string[] s_allowedRegistries = ["ghcr.io/", "public.ecr.aws/"];
 
+    /// <summary>Where our images' Dockerfiles live, the one place MCR may be named (ADR 0011 point 3).</summary>
+    private const string OurImages = "deploy/images/";
+
+    /// <summary>The one MCR image allowed there: Varve's ADR 0111 exception.</summary>
+    private const string OurImageBase = "mcr.microsoft.com/dotnet/runtime-deps:";
+
     [Fact]
     public void No_configuration_file_uses_anonymous_mode()
     {
@@ -32,17 +38,71 @@ public sealed partial class ConfigurationGates
     [Fact]
     public void Every_image_comes_from_an_allowed_registry_pinned_by_digest()
     {
+        List<string> offenders = Offenders(ImageReferences());
+
+        Assert.True(offenders.Count == 0, "Not from ghcr.io/ or public.ecr.aws/ pinned by @sha256, nor our image base in deploy/images/: " + string.Join("; ", offenders));
+    }
+
+    [Theory]
+    [InlineData("compose.yaml")]
+    [InlineData(".github/workflows/ci.yml")]
+    [InlineData("deploy/images/importer/notes.yaml")]
+    [InlineData("deploy/Dockerfile")]
+    [InlineData("tests/fixtures/Dockerfile")]
+    public void A_stray_mcr_reference_outside_our_image_dockerfiles_still_fails(string file)
+    {
+        string image = "mcr.microsoft.com/dotnet/runtime-deps:10.0-noble-chiseled@sha256:" + new string('0', 64);
+
+        Assert.Equal([file + ": " + image], Offenders([(file, image)]));
+    }
+
+    [Fact]
+    public void A_compose_variable_is_judged_by_its_committed_default()
+    {
+        string pinned = "ghcr.io/hafeok/varve-demo-importer:main-0@sha256:" + new string('0', 64);
+
+        Assert.Empty(Offenders([("compose.yaml", "${VARVE_DEMO_IMPORTER_IMAGE:-" + pinned + "}")]));
+        Assert.Single(Offenders([("compose.yaml", "${VARVE_DEMO_IMPORTER_IMAGE:-ghcr.io/hafeok/varve-demo-importer:latest}")]));
+        Assert.Single(Offenders([("compose.yaml", "${VARVE_DEMO_IMPORTER_IMAGE}")]));
+        Assert.Single(Offenders([("compose.yaml", "${VARVE_DEMO_IMPORTER_IMAGE:-mcr.microsoft.com/dotnet/runtime-deps:10.0@sha256:" + new string('0', 64) + "}")]));
+    }
+
+    [Fact]
+    public void Our_image_dockerfiles_may_name_only_the_runtime_deps_base_from_mcr_pinned_by_digest()
+    {
+        string digest = "@sha256:" + new string('0', 64);
+        const string Dockerfile = "deploy/images/importer/Dockerfile";
+
+        Assert.Empty(Offenders([(Dockerfile, "mcr.microsoft.com/dotnet/runtime-deps:10.0-noble-chiseled" + digest)]));
+        Assert.Single(Offenders([(Dockerfile, "mcr.microsoft.com/dotnet/runtime-deps:10.0-noble-chiseled")]));
+        Assert.Single(Offenders([(Dockerfile, "mcr.microsoft.com/dotnet/sdk:10.0" + digest)]));
+        Assert.Single(Offenders([(Dockerfile, "docker.io/library/ubuntu:24.04" + digest)]));
+    }
+
+    /// <summary>
+    /// The images that break the rule (ADR 0003 point 8, ADR 0011 point 3):
+    /// anything not from ghcr.io or public.ecr.aws pinned by digest, except
+    /// the runtime-deps base from MCR, pinned by digest, in a Dockerfile under
+    /// <c>deploy/images/</c>.
+    /// </summary>
+    private static List<string> Offenders(IEnumerable<(string File, string Image)> references)
+    {
         List<string> offenders = [];
-        foreach ((string file, string image) in ImageReferences())
+        foreach ((string file, string reference) in references)
         {
-            bool allowed = s_allowedRegistries.Any(registry => image.StartsWith(registry, StringComparison.Ordinal));
+            // compose's ${NAME:-default}: the committed default is what a
+            // viewer pulls, so it is what must be pinned.
+            Match variable = WithDefault().Match(reference);
+            string image = variable.Success ? variable.Groups["default"].Value : reference;
+            bool allowed = s_allowedRegistries.Any(registry => image.StartsWith(registry, StringComparison.Ordinal))
+                || (file.StartsWith(OurImages, StringComparison.Ordinal) && IsDockerfile(file) && image.StartsWith(OurImageBase, StringComparison.Ordinal));
             if (!allowed || !Digest().IsMatch(image))
             {
-                offenders.Add(file + ": " + image);
+                offenders.Add(file + ": " + reference);
             }
         }
 
-        Assert.True(offenders.Count == 0, "Not from ghcr.io/ or public.ecr.aws/ pinned by @sha256: " + string.Join("; ", offenders));
+        return offenders;
     }
 
     [Fact]
@@ -117,6 +177,9 @@ public sealed partial class ConfigurationGates
 
     [GeneratedRegex(@"^[ \t]*FROM[ \t]+(?:--\S+[ \t]+)*(?<image>\S+)(?:[ \t]+AS[ \t]+(?<stage>\S+))?", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DockerFrom();
+
+    [GeneratedRegex(@"^\$\{[A-Za-z_][A-Za-z0-9_]*:-(?<default>[^}]+)\}$", RegexOptions.CultureInvariant)]
+    private static partial Regex WithDefault();
 
     [GeneratedRegex("@sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Digest();

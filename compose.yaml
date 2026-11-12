@@ -1,0 +1,100 @@
+# The demo on one machine (S1): `docker compose up`.
+#
+#   1. mock-oauth2  the OIDC issuer, a MOCK: it signs a token for any client
+#                   that asks (ADR 0007). Reached by the stack as
+#                   http://mock-oauth2:8080/varve-demo, from your machine on
+#                   localhost:8090.
+#   2. varve        the released Varve server, OIDC only, never anonymous,
+#                   the dataset on the named volume `varve-data`; on
+#                   localhost:8080.
+#   3. setup        one shot: the bootstrap operator applies deploy/nuget.trig
+#                   (the dataset and its grants) with `varve apply`, then
+#                   exits. Nothing else holds the operator's credentials.
+#   4. importer     replays the pinned snapshot over HTTP, one Varve commit
+#                   per catalog commit, as varve-demo-importer (write); takes
+#                   the final checkpoint as varve-demo-checkpointer (admin on
+#                   the dataset alone); prints the rate and the first answer;
+#                   exits 0.
+#
+# Every image is pulled from ghcr.io by tag and digest; nothing is built here
+# (ADRs 0002, 0003, 0011).
+
+name: varve-demo
+
+services:
+  mock-oauth2:
+    # Varve's own pin for its auth tests (.github/ci-images.yaml), upstream (ADR 0007).
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.4@sha256:47374fe063995d9b6d39ebb6ea21eb5f765025bf0aa08b61b08b439eb91adaf0
+    environment:
+      JSON_CONFIG_PATH: /config/mock-oauth2.json
+    volumes:
+      - ./deploy/mock-oauth2.json:/config/mock-oauth2.json:ro
+    ports:
+      - "8090:8080"
+
+  varve:
+    # The release VarveVersion names (ADR 0002); its attestation is verified in CI.
+    image: ghcr.io/hafeok/varve:v0.1.0-preview.15@sha256:f3c1651a11256d35be1330b82d207a9d8b50ff1f39fb61b2ac059087d592d706
+    command: ["serve"]
+    read_only: true
+    environment:
+      VARVE__AUTH__MODE: Oidc
+      VARVE__AUTH__AUTHORITY: http://mock-oauth2:8080/varve-demo
+      # The mock issuer serves its discovery over plain http inside the stack.
+      VARVE__AUTH__REQUIREHTTPSMETADATA: "false"
+      VARVE__AUTH__AUDIENCES__0: api://varve-demo
+      VARVE__MANAGE__BOOTSTRAPOPERATORS__0: varve-demo.operator
+    volumes:
+      - varve-data:/var/lib/varve
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mock-oauth2
+
+  setup:
+    image: ghcr.io/hafeok/varve:v0.1.0-preview.15@sha256:f3c1651a11256d35be1330b82d207a9d8b50ff1f39fb61b2ac059087d592d706
+    command:
+      - apply
+      - /deploy/nuget.trig
+      - --server
+      - http://varve:8080
+      - --authority
+      - http://mock-oauth2:8080/varve-demo
+      - --client-id
+      - varve-demo-operator
+      - --client-secret
+      - not-a-secret-the-issuer-is-a-mock
+      - --scope
+      - api://varve-manage
+    read_only: true
+    volumes:
+      - ./deploy/nuget.trig:/deploy/nuget.trig:ro
+    # The server and the issuer take a few seconds to listen; apply again
+    # until they do.
+    restart: on-failure
+    depends_on:
+      - varve
+      - mock-oauth2
+
+  importer:
+    # ADR 0011 point 7: pulled by tag and digest, never built here. Until the
+    # first publish from main, the default is slice 1a's pull request build.
+    # CI sets VARVE_DEMO_IMPORTER_IMAGE to the image its own run pushed.
+    image: ${VARVE_DEMO_IMPORTER_IMAGE:-ghcr.io/hafeok/varve-demo-importer:pr-c886d5f7bf29cd244a8188649ffa69d611b5baa3@sha256:13179a8d46ebf94d4fdbb0473e0183bbb827dfe926c949ddc28f1c701987ad11}
+    read_only: true
+    environment:
+      VARVE_DEMO_SERVER: http://varve:8080
+      VARVE_DEMO_ISSUER: http://mock-oauth2:8080/varve-demo
+      # The pinned snapshot, a release asset; verified against the manifest
+      # the importer carries before a byte of it is used (ADR 0008).
+      VARVE_DEMO_SNAPSHOT: https://github.com/Hafeok/varve-demo/releases/download/snapshot-edb36caaa27f/snapshot.tar.gz
+      VarveDemo__Checkpoints__EveryCommits: "5000"
+    volumes:
+      - importer-cache:/var/lib/varve-demo
+    depends_on:
+      - setup
+      - varve
+
+volumes:
+  varve-data:
+  importer-cache:

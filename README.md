@@ -19,12 +19,125 @@ append-only log, the NuGet catalog:
 - the same engine answering the same query in the browser, offline;
 - the database as files you can clone.
 
-## Status: nothing runs yet
+## Status: S1 and S2 pass
 
-**No step runs today.** This repository holds the specification, the
-decisions, the build and the gates that will hold the steps to it. Every step
-below is `pending`. A step becomes `passing` only when CI runs it end to end
-against a released Varve.
+**S1 and S2 pass**, end to end, in CI on every pull request, against Varve
+`0.1.0-preview.15` ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)):
+
+- **S1:** 102.7 s from `docker compose up` to the first answer, against
+  3 minutes.
+- **S2:** 81 ms and 70 ms per query, against 2 s, and the answers agree with
+  an independent reader of the snapshot.
+
+Every other step is `pending`.
+
+**Memory.** S1 needs about 1.6 GB of resident memory, measured with
+`docker top` during a local run:
+
+| Container | Peak resident memory |
+|---|---|
+| Varve server | about 1.0 GB (963 MB in CI, after the final checkpoint) |
+| importer | 388 MB |
+| mock issuer | 201 MB |
+
+Counting the page cache the snapshot fills, Docker reports about 3.2 GB.
+Docker's default memory allowance on some machines is below this, so give
+Docker at least 2 GB, and 4 GB to be comfortable.
+
+Under a 512 MB limit on the server, the import is refused part-way and the
+dataset does not reopen under that limit
+([Hafeok/Varve#227](https://github.com/Hafeok/Varve/issues/227)). What CI
+proves is the safety property: the refusal is clean, and nothing
+acknowledged is lost.
+
+## Run it
+
+You need Docker. From a clone of this repository:
+
+```bash
+docker compose up
+```
+
+That starts four services and stops one of them when it is done:
+
+| Service | What it does | On your machine |
+|---|---|---|
+| `mock-oauth2` | the OIDC issuer, a **mock** that signs a token for anyone who asks | `localhost:8090` |
+| `varve` | the released Varve server, OIDC only; the dataset is on the volume `varve-data` | `localhost:8080` |
+| `setup` | applies [`deploy/nuget.trig`](deploy/nuget.trig) (the dataset and its grants) as the bootstrap operator, once, then exits | |
+| `importer` | replays the pinned snapshot over HTTP, one Varve commit per catalog commit, prints the rate, takes the final checkpoint, prints the first answer, then exits | |
+
+Then ask S2's question of a lock file with the demo's tool:
+
+```bash
+dotnet run --project src/VarveDemo.Tool -- deps --lock samples/packages.lock.json
+```
+
+`varve-demo` ([ADR 0012](docs/adr/0012-the-demo-tool.md)) is a .NET tool. It
+is not on nuget.org yet: it is published there from the demo's first
+release. Until then, run it from a clone as above, or pack it and install it
+from a local folder, as CI does.
+
+**What each client may do.** Each long-running client holds only what it
+needs ([ADR 0007](docs/adr/0007-local-authentication-with-a-mock-oidc-issuer.md)
+and its amendment):
+
+- `varve-demo-importer` writes the dataset;
+- `varve-demo-viewer` reads it;
+- `varve-demo-checkpointer` is the dataset's admin, for the checkpoint, and
+  nothing more;
+- `varve-demo-operator` creates the dataset and is used once, by `setup`.
+
+The importer process holds the importer's and the checkpointer's
+credentials. With the mock issuer these are client ids with no real secret.
+
+**What history is loaded.** The snapshot covers the top 3 000 packages by
+downloads, pinned by hash ([`snapshot/manifest.json`](snapshot/manifest.json)),
+in two parts ([ADR 0008](docs/adr/0008-the-dataset-and-its-mapping.md),
+amendment of 2026-11-03):
+
+- **the base**: every version of those packages as the catalog stood on
+  **2026-10-20**, loaded one Varve commit per package;
+- **the window**: every catalog commit from 2026-10-20 to 2026-11-03,
+  replayed one Varve commit each, as the catalog made them.
+
+History before 2026-10-20 is not replayed, and time travel starts there.
+
+```bash
+varve-demo import --since 2019-09-23
+```
+
+That replays the catalog from any date, with no base. From the first
+deprecation data, on 2019-09-23, it took 63.7 minutes on a cloud machine:
+33 minutes to build that history from nuget.org, then 237 766 catalog
+commits replayed in 29 minutes. The server peaked at 4.5 GB of memory.
+
+**What is stored.** Varve holds the catalog's advisory state of each
+version: its id, version, listing, deprecation and vulnerabilities, in the
+catalog's own terms. It does not hold the whole catalog; dependency groups
+and the rest of each leaf are read and dropped
+([ADR 0010](docs/adr/0010-the-graph-model-and-vocabulary.md), amendment of
+2026-11-03).
+
+**Names.** The catalog's JSON-LD is read by Varve's own reader,
+`Varve.JsonLd`, with the catalog's own terms. The few names the demo adds
+are in `urn:varve-demo:`, which is not a registered URN namespace: they name
+things in this dataset and resolve nowhere
+([ADR 0010](docs/adr/0010-the-graph-model-and-vocabulary.md)).
+
+**Images.** Every image is pulled from `ghcr.io` by tag and digest. The
+importer's image, `ghcr.io/hafeok/varve-demo-importer`, is built by this
+repository's CI. Its base is the chiseled .NET `runtime-deps` image from MCR,
+the same exception Varve's own image makes
+([ADR 0011](docs/adr/0011-our-container-images.md)). A clean machine can pull
+it only once the package is public on GHCR.
+
+**The importer's pin, for now.** Until the first publish from `main`,
+`compose.yaml` pins the importer at a pull request's build
+(`pr-c886d5f…`, attested and verified in CI). After that, every publish from
+`main` opens a pull request that moves the pin to the image it published
+([ADR 0011](docs/adr/0011-our-container-images.md), amendment of
+2026-11-06).
 
 ## The script
 
@@ -35,8 +148,8 @@ test that runs it end to end.
 <!-- spec-table:begin -->
 | Step | Title | Target | Check | State |
 |---|---|---|---|---|
-| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded | S1_ZeroToQuery | pending |
-| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query | S2_DeprecatedAndVulnerableDependencies | pending |
+| S1 | Zero to query | ≤ 3 min from `docker compose up` to the first answer, image pulls excluded; measured in CI: 102.7 s ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S1_ZeroToQuery | passing |
+| S2 | Deprecated and vulnerable dependencies | ≤ 2 s per query; measured in CI: 81 ms and 70 ms ([run 41652404366](https://github.com/Hafeok/varve-demo/actions/runs/41652404366)) | S2_DeprecatedAndVulnerableDependencies | passing |
 | S3 | Time travel and diff | ≤ 2 s per as-of query or diff | S3_TimeTravelAndDiff | pending |
 | S4 | Live change feed | ≤ 5 s from a commit landing to the subscriber printing it | S4_LiveChangeFeed | pending |
 | S5 | The same log in the browser | set by ADR 0005's measurement | S5_SameLogInTheBrowser | pending |
@@ -93,6 +206,9 @@ are ADRs ([index](docs/adr/README.md)), each with a decision set in
 - [0007 Local authentication with a mock OIDC issuer](docs/adr/0007-local-authentication-with-a-mock-oidc-issuer.md)
 - [0008 The dataset and its mapping](docs/adr/0008-the-dataset-and-its-mapping.md)
 - [0009 S4's subscription path](docs/adr/0009-s4s-subscription-path.md)
+- [0010 The graph model and vocabulary](docs/adr/0010-the-graph-model-and-vocabulary.md) (proposed)
+- [0011 Our container images](docs/adr/0011-our-container-images.md) (proposed)
+- [0012 The demo tool](docs/adr/0012-the-demo-tool.md) (proposed)
 
 How the work is done is in [AGENTS.md](AGENTS.md).
 

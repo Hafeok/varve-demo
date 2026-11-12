@@ -30,8 +30,6 @@
   </PropertyGroup>
 
   <ItemGroup Label="Varve, as released (ADR 0002)">
-    <!-- No project references these yet; slice 1's importer and checks are the
-         first. They are here so that the pin has exactly one place. -->
     <PackageVersion Include="Varve.Protocol.Client" Version="$(VarveVersion)" Adr="0002" />
     <PackageVersion Include="Varve.JsonLd" Version="$(VarveVersion)" Adr="0006" />
     <PackageVersion Include="Varve.Delta" Version="$(VarveVersion)" Adr="0009" />
@@ -39,6 +37,13 @@
 
   <ItemGroup Label="Decision-driven enforcement: build-time only, never shipped">
     <PackageVersion Include="DecisionDriven.Analyzers" Version="0.1.0-preview.8" Adr="0003" />
+  </ItemGroup>
+
+  <ItemGroup Label="The S2 oracle's version order, test-only (ADR 0010)">
+    <!-- NuGet's own implementation of its version order, so the oracle is
+         independent of the importer's version key. Resolved from nuget.org
+         on 2026-11-03. -->
+    <PackageVersion Include="NuGet.Versioning" Version="7.9.0" Adr="0010" />
   </ItemGroup>
 
   <ItemGroup Label="Tests: xunit.v3 on Microsoft Testing Platform (ADR 0003)">

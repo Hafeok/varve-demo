@@ -1,0 +1,12 @@
+{
+  "service": "https://azuresearch-usnc.nuget.org/query",
+  "query": "?q=&prerelease=true&semVerLevel=2.0.0&sortBy=totalDownloads-desc&skip=0&take=1000",
+  "pagedBy": "skip in steps of 1000",
+  "n": 3000,
+  "ranAt": "2026-11-03T11:34:33Z",
+  "totalHits": 556044,
+  "first": "Newtonsoft.Json",
+  "firstTotalDownloads": 9686304799,
+  "last": "Xamarin.Firebase.Encoders",
+  "lastTotalDownloads": 10126623
+}

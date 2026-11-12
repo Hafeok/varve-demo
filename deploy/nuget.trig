@@ -1,0 +1,29 @@
+# The dataset and its grants (ADR 0007 and its amendment of 2026-11-03),
+# applied once by the bootstrap operator with `varve apply`, from compose's
+# one-shot setup service. Each long-running client holds only what it needs:
+#
+#   varve-demo-importer      write, every graph of nuget   (data plane)
+#   varve-demo-viewer        read, every graph of nuget    (data plane)
+#   varve-demo-checkpointer  admin on nuget alone          (management plane)
+#
+# The operator itself is a bootstrap operator by configuration
+# (VARVE__MANAGE__BOOTSTRAPOPERATORS__0 in compose.yaml) and needs no grant.
+@prefix varve: <https://w3id.org/varve/ns#> .
+@prefix d: <urn:varve-demo:manage/> .
+
+<https://w3id.org/varve/ns#manage/dataset/nuget> {
+  d:nuget a varve:Dataset ;
+    varve:datasetName "nuget" ;
+    varve:storage varve:File .
+
+  d:importer a varve:Role ; varve:claimValue "varve-demo.importer" .
+  d:viewer a varve:Role ; varve:claimValue "varve-demo.viewer" .
+  d:checkpointer a varve:Role ; varve:claimValue "varve-demo.checkpointer" .
+
+  d:importer-writes a varve:Grant ;
+    varve:grantee d:importer ; varve:permission varve:write ; varve:allGraphs true .
+  d:viewer-reads a varve:Grant ;
+    varve:grantee d:viewer ; varve:permission varve:read ; varve:allGraphs true .
+  d:checkpointer-admin a varve:Grant ;
+    varve:grantee d:checkpointer ; varve:permission varve:admin .
+}

@@ -251,3 +251,99 @@ guide's description of `MaxAsOfDistance` as a distance below the head, which
 led this ADR's first draft astray, is
 [Hafeok/Varve#161](https://github.com/Hafeok/Varve/issues/161); at
 `v0.1.0-preview.15` `docs/operator/configure.md:169` still says it.
+
+## Amendment, 2026-11-03: the checkpoints are taken by a dataset admin
+
+Filed unaccepted by session 03, on #5. Point 7's "through the operator
+client" is narrowed by ADR 0007's amendment of this date: the importer takes
+the checkpoints through `varve-demo-checkpointer`, which holds `admin` on the
+dataset `nuget` and nothing more, on the same route. The bootstrap operator
+only declares the dataset and its grants. S3's screen says the importer
+takes the checkpoints "as the dataset's admin", not "as the operator".
+
+**Every K commits, and slice 1a.** Point 6 says there are no checkpoints
+during the import, one at its end, and then one whenever more than K commits
+have landed since the last. Slice 1a's importer does exactly that: it checks
+K against `maxAsOfDistance` at start, and takes the final checkpoint. The
+"every K" rule binds the commits after the import, which arrive with S4's
+live tail in slice 2. The hand-off prompt for slice 1a asked for a
+checkpoint every K commits during the import; this ADR's point 6 and its
+alternative 8 reject that, and the importer follows the ADR.
+
+## Amendment, 2026-11-03: the base, and the superseded checkpoint ruling
+
+Filed unaccepted by session 03, on #5, at the maintainer's rulings.
+
+1. **The ruling for point 7 changes key.** `ImporterTakesCheckpointsAsOperator`
+   is superseded by `ImporterTakesCheckpointsAsDatasetAdmin`, filed unaccepted:
+   the same route, through `varve-demo-checkpointer`, which holds `admin` on
+   the dataset alone. A key never changes meaning; the old one leaves the set,
+   and its text is kept in the set's notes.
+2. **The base sits at the window's lower bound T0** (ADR 0008's amendment of
+   2026-11-03). The import loads the catalog's state of the N packages as of
+   T0 first, one commit per package. Each base commit asserts, in
+   `<urn:varve-demo:catalog-log>`, a node
+   `<urn:varve-demo:base:{id}>` with `vd:basePackage` and `vd:baseAsOf` T0
+   (ADR 0010's amendment). Point 4's time index reads `vd:baseAsOf` as those
+   positions' catalog time, so every base position resolves to T0, and
+   catalog time T0 resolves to the last base position.
+3. **S3's slider starts at T0**, and its screen says the base is the
+   catalog's state as of T0 and that history before T0 is not replayed. A
+   viewer who wants it runs `varve-demo import --since <date>`.
+
+Point 6's checkpoint rule is unchanged, as the maintainer ruled: no
+checkpoints during the import, one at its end.
+
+## Amendment, 2026-11-03: memory, measured; checkpoints during the import are not proposed
+
+Filed unaccepted by session 03, on #5, after the maintainer's ruling to test
+the import under a memory limit, and to propose checkpoints during long
+imports for memory if the server failed under it.
+
+**What was measured.** Varve `v0.1.0-preview.15`, on this session's machine.
+The server is limited to 512 MB with a compose override (CI only, never the
+viewer's compose).
+
+| Import | Under 512 MB |
+|---|---|
+| the window, whole-leaf model (1 731 commits, 1.75M quads) | refused at commit 607: `400 operation-failed`, "Insufficient memory" |
+| the base and window, advisory-state model (ADR 0010's amendment) | refused at base commit 1 068 of 3 000, about 1.41M quads: `503 unavailable`, "The default projection failed at position 1067 and must be rebuilt: Insufficient memory" |
+| the same, with a checkpoint every 250 commits | refused at the same commit |
+
+In none was the container OOM-killed. The server refuses the write and keeps
+running.
+
+Resident memory, without a limit, through S1 with the base:
+
+- 45 MB at start;
+- 576 MB at the end of the import, before the final checkpoint;
+- 1.10 GB after it;
+- 133 MB after a restart.
+
+After a refusal under 512 MB:
+
+- a restart under the same limit does not reopen the dataset within 60 s;
+  it cycles between `closed` and not ready;
+- a restart without the limit reopens it in about 10 s, at 680 MB to 705 MB,
+  with every acknowledged commit present.
+
+**What it means.** The server's memory grows with the data committed since
+the process started. A checkpoint does not release it within the running
+process: a checkpoint every 250 commits changed nothing. Opening a dataset
+needs memory proportional to the commits above its newest checkpoint. The log
+on disk is safe: no acknowledged commit was lost in any run.
+
+**So checkpoints during the import are not proposed.** They were the remedy
+the ruling named. They were measured not to bound the importing process's
+memory, so adding them would cost import time for nothing S1 needs. Point 6
+stands unchanged. The finding is
+[Hafeok/Varve#227](https://github.com/Hafeok/Varve/issues/227), filed from the
+slice's draft with these numbers and the reproduction, and the limitation is
+on the evidence page's "not yet proven" list with #227. What the measurements
+do show is a safety property, and CI tests it:
+`UnderMemoryPressureAWriteIsRefusedCleanlyAndNothingAcknowledgedIsLost`. A
+write that does not fit is refused cleanly, as an HTTP problem and never a
+crash, and every commit acknowledged before the refusal is there after a
+restart. The importer keeps
+`VarveDemo:Checkpoints:ForMemoryEveryCommits`, 0 by default, so the
+measurement can be repeated on a later Varve.

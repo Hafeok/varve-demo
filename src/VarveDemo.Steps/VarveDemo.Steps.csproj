@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The steps a viewer runs against the loaded dataset: S1's first answer and
+    S2's question, as SPARQL over Varve's protocol (C3), and the measurements
+    each step reports for the evidence page.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>VarveDemo.Steps</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../VarveDemo.Importer/VarveDemo.Importer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Queries/*.rq" LogicalName="queries/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

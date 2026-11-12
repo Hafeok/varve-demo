@@ -1,0 +1,57 @@
+# Publishes the pinned snapshot as a release asset (ADR 0008), on demand, from
+# main only. It rebuilds the snapshot from nuget.org, refuses to publish one
+# whose hash differs from the committed manifest, and releases it as
+# snapshot-<first 12 hex of its sha256>/snapshot.tar.gz, the URL compose.yaml
+# gives the importer. The importer verifies every file against the manifest it
+# carries before it uses a byte.
+
+name: snapshot release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: publish the snapshot
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build src/VarveDemo.Tool -c Release
+
+      - name: Rebuild the snapshot from nuget.org and compare
+        run: >-
+          dotnet run --project src/VarveDemo.Tool -c Release --no-build --
+          snapshot build --inputs snapshot --out "$RUNNER_TEMP/snapshot"
+          --check snapshot/manifest.json
+
+      - name: Pack and release
+        run: |
+          sha="$(python3 -c "import json; print(json.load(open('snapshot/manifest.json'))['sha256'])")"
+          tag="snapshot-${sha:0:12}"
+          dotnet run --project src/VarveDemo.Tool -c Release --no-build -- snapshot pack --snapshot "$RUNNER_TEMP/snapshot" --out "$RUNNER_TEMP/snapshot.tar.gz"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag is already released; a release asset is never replaced."
+            exit 0
+          fi
+          gh release create "$tag" "$RUNNER_TEMP/snapshot.tar.gz" snapshot/manifest.json \
+            --target "${{ github.sha }}" --prerelease \
+            --title "Snapshot ${sha:0:12}" \
+            --notes "The pinned NuGet catalog snapshot, sha256 $sha, rebuilt from nuget.org by this run and identical to snapshot/manifest.json at ${{ github.sha }}."

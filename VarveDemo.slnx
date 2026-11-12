@@ -1,5 +1,13 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VarveDemo.Importer/VarveDemo.Importer.csproj" />
+    <Project Path="src/VarveDemo.Snapshot/VarveDemo.Snapshot.csproj" />
+    <Project Path="src/VarveDemo.Steps/VarveDemo.Steps.csproj" />
+    <Project Path="src/VarveDemo.Tool/VarveDemo.Tool.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/VarveDemo.Oracle/VarveDemo.Oracle.csproj" />
     <Project Path="tests/VarveDemo.Spec.Tests/VarveDemo.Spec.Tests.csproj" />
+    <Project Path="tests/VarveDemo.Steps.Tests/VarveDemo.Steps.Tests.csproj" />
   </Folder>
 </Solution>
