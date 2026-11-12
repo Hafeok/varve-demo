@@ -80,7 +80,7 @@ services:
     # ADR 0011 point 7: pulled by tag and digest, never built here. Until the
     # first publish from main, the default is slice 1a's pull request build.
     # CI sets VARVE_DEMO_IMPORTER_IMAGE to the image its own run pushed.
-    image: ${VARVE_DEMO_IMPORTER_IMAGE:-ghcr.io/hafeok/varve-demo-importer:pr-c886d5f7bf29cd244a8188649ffa69d611b5baa3@sha256:13179a8d46ebf94d4fdbb0473e0183bbb827dfe926c949ddc28f1c701987ad11}
+    image: ${VARVE_DEMO_IMPORTER_IMAGE:-ghcr.io/hafeok/varve-demo-importer:main-f22c6f6d6021277002ad24d7bc08a6c47e96d22e@sha256:36699621917671018d38cc96e044bbf5d36d3d377df732ff7cac191990a317bd}
     read_only: true
     environment:
       VARVE_DEMO_SERVER: http://varve:8080
